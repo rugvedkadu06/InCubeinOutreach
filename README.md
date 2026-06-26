@@ -1,4 +1,4 @@
-#A centralized ecosystem intelligence platform for mapping and analyzing India's startup ecosystem, including incubators, accelerators, startups, mentors, investors, government schemes, and their interconnected relationships.
+# A centralized ecosystem intelligence platform for mapping and analyzing India's startup ecosystem, including incubators, accelerators, startups, mentors, investors, government schemes, and their interconnected relationships.
 
 The platform provides an automated data intelligence pipeline for:
 
