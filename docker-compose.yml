@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+    container_name: incube-backend
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: incube-frontend
+
+  db:
+    image: postgres:16-alpine
+    container_name: incube-postgres

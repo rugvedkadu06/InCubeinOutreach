@@ -1,0 +1,32 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Git
+.git
+.gitignore
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Local database (PostgreSQL will be used in Docker)
+*.db
+*.sqlite3
+
+# Temporary files
+scratch/
