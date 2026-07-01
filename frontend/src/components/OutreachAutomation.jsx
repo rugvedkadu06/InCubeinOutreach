@@ -100,7 +100,7 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
   const [mouDate, setMouDate] = useState(new Date().toISOString().split("T")[0]);
   const [duration, setDuration] = useState("3 Years");
   const [targetSectors, setTargetSectors] = useState("DeepTech, AI/ML, SaaS");
-  const [incubatorRep, setIncubatorRep] = useState("Director, Nagpur Incubator Hub");
+  const [incubatorRep, setIncubatorRep] = useState("Director, InCubein Foundation");
   const [signatureData, setSignatureData] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [sendingMou, setSendingMou] = useState(false);
@@ -293,7 +293,7 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       const meetingsData = await meetingsRes.json();
       setMeetings(meetingsData);
 
-      const incsRes = await fetch("http://127.0.0.1:8000/api/incubators");
+      const incsRes = await fetch("http://127.0.0.1:8000/api/incubators?limit=10000");
       const incsData = await incsRes.json();
       setIncubators(incsData);
 
@@ -498,6 +498,28 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       }
     } catch (err) {
       addLog("ERROR", "Failed to connect to backend meetings status API.");
+    }
+  };
+  
+  const handleDeleteMeeting = async (meetingId) => {
+    if (!window.confirm("Are you sure you want to remove this meeting and cancel its Google Calendar event?")) {
+      return;
+    }
+    addLog("CALENDAR", `Removing meeting ID: ${meetingId}...`);
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/outreach/meetings/${meetingId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addLog("CALENDAR", `Meeting successfully removed!`);
+        toast.success("Meeting removed from sync.");
+        await fetchData();
+      } else {
+        addLog("ERROR", `Failed to delete meeting: ${data.detail || "Server error"}`);
+      }
+    } catch (err) {
+      addLog("ERROR", "Failed to connect to backend delete meeting API.");
     }
   };
 
@@ -1091,7 +1113,22 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                 <select 
                   className="form-input"
                   value={selectedIncId}
-                  onChange={(e) => setSelectedIncId(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedIncId(id);
+                    const sel = incubators.find(i => i.id === id);
+                    if (sel) {
+                      // Auto-fill rep title from DB
+                      if (sel.founder_or_head) setIncubatorRep(sel.founder_or_head);
+                      // Auto-fill sectors from DB focus_areas
+                      if (sel.focus_areas) {
+                        const secs = Array.isArray(sel.focus_areas)
+                          ? sel.focus_areas.join(", ")
+                          : typeof sel.focus_areas === "string" ? sel.focus_areas : "";
+                        if (secs) setTargetSectors(secs);
+                      }
+                    }
+                  }}
                   required
                   style={{ flex: 1, color: "black", background: "#f8fafc" }}
                 >
@@ -1117,6 +1154,51 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                   </button>
                 )}
               </div>
+
+              {/* Selected incubator detail card */}
+              {selectedIncId && (() => {
+                const sel = incubators.find(i => i.id === selectedIncId);
+                if (!sel) return null;
+                const secs = sel.focus_areas
+                  ? (Array.isArray(sel.focus_areas) ? sel.focus_areas : String(sel.focus_areas).split(",").map(s => s.trim()))
+                  : [];
+                return (
+                  <div style={{
+                    marginTop: "0.75rem",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "8px",
+                    background: "linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(139,92,246,0.06) 100%)",
+                    border: "1px solid rgba(99,102,241,0.18)",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "0.4rem 1.5rem",
+                    fontSize: "0.82rem"
+                  }}>
+                    <div style={{ gridColumn: "1 / -1", fontWeight: 800, color: "var(--primary)", fontSize: "0.95rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      🏛️ {sel.name}
+                    </div>
+                    {sel.organization_type && <div><span style={{ color: "var(--text-dim)" }}>Type: </span><strong>{sel.organization_type}</strong></div>}
+                    {sel.city && sel.state && <div><span style={{ color: "var(--text-dim)" }}>Location: </span><strong>{sel.city}, {sel.state}</strong></div>}
+                    {sel.email && <div><span style={{ color: "var(--text-dim)" }}>Email: </span><strong style={{ color: "#4f46e5" }}>{sel.email}</strong></div>}
+                    {sel.website && <div><span style={{ color: "var(--text-dim)" }}>Website: </span><a href={sel.website} target="_blank" rel="noreferrer" style={{ color: "#6366f1", fontWeight: 600 }}>{sel.website.replace(/^https?:\/\//, "")}</a></div>}
+                    {sel.founder_or_head && <div><span style={{ color: "var(--text-dim)" }}>Head: </span><strong>{sel.founder_or_head}</strong></div>}
+                    {sel.startup_count != null && <div><span style={{ color: "var(--text-dim)" }}>Startups: </span><strong>{sel.startup_count}</strong></div>}
+                    {secs.length > 0 && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <span style={{ color: "var(--text-dim)" }}>Focus Areas: </span>
+                        {secs.map((s, i) => (
+                          <span key={i} style={{ display: "inline-block", background: "rgba(99,102,241,0.1)", color: "#4f46e5", borderRadius: "4px", padding: "0.1rem 0.4rem", fontSize: "0.75rem", marginRight: "0.3rem", marginTop: "0.2rem", fontWeight: 600 }}>{s}</span>
+                        ))}
+                      </div>
+                    )}
+                    {sel.description && (
+                      <div style={{ gridColumn: "1 / -1", color: "var(--text-dim)", fontSize: "0.78rem", marginTop: "0.2rem", lineHeight: 1.4 }}>
+                        {String(sel.description).slice(0, 200)}{String(sel.description).length > 200 ? "…" : ""}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
@@ -1138,7 +1220,7 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                   className="form-input" 
                   value={partyBName} 
                   onChange={(e) => setPartyBName(e.target.value)}
-                  placeholder="e.g. Nagpur Science Research Institute"
+                  placeholder="e.g. InCubein Pune Center"
                   required
                 />
               </div>
@@ -1711,7 +1793,14 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                 <span>No automated meetings scheduled yet. Trigger outreach and reply checking to sync.</span>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "250px", overflowY: "auto" }}>
+              <div style={{ 
+                display: "flex", 
+                flexDirection: "column", 
+                gap: "0.75rem", 
+                maxHeight: meetings.length > 2 ? "190px" : "auto", 
+                overflowY: meetings.length > 2 ? "auto" : "visible",
+                paddingRight: "4px"
+              }}>
                 {meetings.map((meeting) => (
                   <div 
                     key={meeting.id} 
@@ -1842,6 +1931,27 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                           <span>Join</span>
                           <ExternalLink size={10} />
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMeeting(meeting.id)}
+                          style={{
+                            fontSize: "0.7rem",
+                            color: "white",
+                            background: "var(--accent-red)",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            border: "none",
+                            cursor: "pointer",
+                            fontWeight: "600",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.2rem"
+                          }}
+                          title="Remove from sync & cancel calendar event"
+                        >
+                          <Trash2 size={10} />
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </div>
                   </div>

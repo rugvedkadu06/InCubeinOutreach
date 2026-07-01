@@ -169,7 +169,7 @@ export default function MouGenerator({ preselectedIncubatorName }) {
   const [mouDate, setMouDate] = useState(new Date().toISOString().split("T")[0]);
   const [duration, setDuration] = useState("3 Years");
   const [targetSectors, setTargetSectors] = useState("DeepTech, AI/ML, SaaS");
-  const [incubatorRep, setIncubatorRep] = useState("Director, IncubIMN");
+  const [incubatorRep, setIncubatorRep] = useState("Director, InCubein Foundation");
   const [mouText, setMouText] = useState("");
   
   // Manual editing and auto-sync state
@@ -180,7 +180,7 @@ export default function MouGenerator({ preselectedIncubatorName }) {
   const [signatureData, setSignatureData] = useState(null);
   
   // Email sending states
-  const [emailRecipient, setEmailRecipient] = useState("abcd@rtmun.ac.in");
+  const [emailRecipient, setEmailRecipient] = useState("info@incubeinfoundation.org");
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState(null); // { type: 'success'|'error'|'mock', message: '' }
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -191,17 +191,19 @@ export default function MouGenerator({ preselectedIncubatorName }) {
   useEffect(() => {
     const fetchIncubators = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/incubators");
+        const res = await fetch("http://127.0.0.1:8000/api/incubators?limit=10000");
         const data = await res.json();
         setIncubators(data);
         
         // Find default Nagpur University incubator
-        const defaultNagpur = data.find(inc => inc.name.includes("IMN incubation") || inc.name.includes("IncubIMN") || inc.name.includes("Nagpur"));
-        if (defaultNagpur) {
-          setSelectedIncId(defaultNagpur.id);
-          setIncubatorRep(defaultNagpur.founder_or_head || "Director, IncubIMN");
-          if (defaultNagpur.email) {
-            setEmailRecipient(defaultNagpur.email);
+        const defaultCollab = data.find(inc => inc.name.toLowerCase().includes("incubein") || inc.name.toLowerCase().includes("pune") || inc.name.toLowerCase().includes("mumbai")) || data[0];
+        if (defaultCollab) {
+          setSelectedIncId(defaultCollab.id);
+          setPartyBName(defaultCollab.name || "");
+          setPartyBRep(defaultCollab.founder_or_head || "Chief Executive Officer");
+          setPartyBEmail(defaultCollab.email || "");
+          if (defaultCollab.email) {
+            setEmailRecipient(defaultCollab.email);
           }
         }
       } catch (e) {
@@ -219,7 +221,9 @@ export default function MouGenerator({ preselectedIncubatorName }) {
       const match = incubators.find(inc => inc.name.toLowerCase() === preselectedIncubatorName.toLowerCase());
       if (match) {
         setSelectedIncId(match.id);
-        setIncubatorRep(match.founder_or_head || "Chief Executive Officer");
+        setPartyBName(match.name || "");
+        setPartyBRep(match.founder_or_head || "Chief Executive Officer");
+        setPartyBEmail(match.email || "");
         if (match.email) {
           setEmailRecipient(match.email);
         }
@@ -233,11 +237,22 @@ export default function MouGenerator({ preselectedIncubatorName }) {
     setSelectedIncId(id);
     const selected = incubators.find((inc) => inc.id === id);
     if (selected) {
-      setIncubatorRep(selected.founder_or_head || "Chief Executive Officer");
-      // Populate recipient email defaults to incubator email if set
+      setPartyBName(selected.name || "");
+      setPartyBRep(selected.founder_or_head || "Chief Executive Officer");
+      setPartyBEmail(selected.email || "");
       if (selected.email) {
         setEmailRecipient(selected.email);
       }
+      if (selected.focus_areas) {
+        const secs = Array.isArray(selected.focus_areas)
+          ? selected.focus_areas.join(", ")
+          : typeof selected.focus_areas === "string" ? selected.focus_areas : "";
+        if (secs) setTargetSectors(secs);
+      }
+    } else {
+      setPartyBName("");
+      setPartyBRep("");
+      setPartyBEmail("");
     }
   };
 
@@ -245,9 +260,9 @@ export default function MouGenerator({ preselectedIncubatorName }) {
   const currentIncubator = incubators.find((inc) => inc.id === selectedIncId);
   const formData = {
     date: mouDate,
-    incubatorName: currentIncubator ? currentIncubator.name : "",
-    incubatorCity: currentIncubator ? currentIncubator.city : "",
-    incubatorState: currentIncubator ? currentIncubator.state : "",
+    incubatorName: "InCubein Foundation",
+    incubatorCity: "Pune",
+    incubatorState: "Maharashtra",
     incubatorRep: incubatorRep,
     partyBName: partyBName,
     partyBEmail: partyBEmail,
@@ -520,11 +535,11 @@ export default function MouGenerator({ preselectedIncubatorName }) {
   const handleSendMou = async (e) => {
     e.preventDefault();
     if (!selectedIncId) {
-      toast.warning("Please select a Party A Incubator.");
+      toast.warning("Please select a target incubator.");
       return;
     }
     if (!partyBName) {
-      toast.warning("Please enter Party B Name.");
+      toast.warning("Please enter Party B (Incubator) Name.");
       return;
     }
     if (!signatureData) {
@@ -540,8 +555,8 @@ export default function MouGenerator({ preselectedIncubatorName }) {
     setEmailStatus(null);
 
     const postData = {
-      incubator_name: currentIncubator.name,
-      incubator_email: currentIncubator.email || "incubator@example.gov.in",
+      incubator_name: "InCubein Foundation",
+      incubator_email: "info@incubeinfoundation.org",
       party_b_name: partyBName,
       party_b_email: partyBEmail || "partyb@example.com",
       mou_title: TEMPLATES[mouType].title,
@@ -630,23 +645,68 @@ export default function MouGenerator({ preselectedIncubatorName }) {
           </div>
 
           <div className="form-group">
-            <label>Party A: Incubator (Select from indexed DB)</label>
+            <label>Select Incubator for Collaboration (Party B)</label>
             <select 
               className="form-select"
               value={selectedIncId}
               onChange={handleIncubatorChange}
               disabled={loading}
             >
-              <option value="">-- Choose Incubator --</option>
+              <option value="">{loading ? "Loading..." : `-- Choose Incubator (${incubators.length} available) --`}</option>
               {incubators.map((inc) => (
-                <option key={inc.id} value={inc.id}>{inc.name} ({inc.city})</option>
+                <option key={inc.id} value={inc.id}>{inc.name} ({inc.city ? `${inc.city}, ` : ""}{inc.state})</option>
               ))}
             </select>
-            {loading && <span style={{ fontSize: "0.85rem", color: "var(--text-dim)" }}>Loading 1,353 records...</span>}
+            {loading && <span style={{ fontSize: "0.85rem", color: "var(--text-dim)" }}>Loading records...</span>}
+
+            {/* Selected incubator detail card */}
+            {selectedIncId && (() => {
+              const sel = incubators.find(i => i.id === selectedIncId);
+              if (!sel) return null;
+              const secs = sel.focus_areas
+                ? (Array.isArray(sel.focus_areas) ? sel.focus_areas : String(sel.focus_areas).split(",").map(s => s.trim()))
+                : [];
+              return (
+                <div style={{
+                  marginTop: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(139,92,246,0.06) 100%)",
+                  border: "1px solid rgba(99,102,241,0.18)",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "0.4rem 1.5rem",
+                  fontSize: "0.82rem"
+                }}>
+                  <div style={{ gridColumn: "1 / -1", fontWeight: 800, color: "var(--primary)", fontSize: "0.95rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    🏛️ {sel.name}
+                  </div>
+                  {sel.organization_type && <div><span style={{ color: "var(--text-dim)" }}>Type: </span><strong>{sel.organization_type}</strong></div>}
+                  {sel.city && sel.state && <div><span style={{ color: "var(--text-dim)" }}>Location: </span><strong>{sel.city}, {sel.state}</strong></div>}
+                  {sel.email && <div><span style={{ color: "var(--text-dim)" }}>Email: </span><strong style={{ color: "#4f46e5" }}>{sel.email}</strong></div>}
+                  {sel.website && <div><span style={{ color: "var(--text-dim)" }}>Website: </span><a href={sel.website} target="_blank" rel="noreferrer" style={{ color: "#6366f1", fontWeight: 600 }}>{sel.website.replace(/^https?:\/\//, "")}</a></div>}
+                  {sel.founder_or_head && <div><span style={{ color: "var(--text-dim)" }}>Head: </span><strong>{sel.founder_or_head}</strong></div>}
+                  {sel.startup_count != null && <div><span style={{ color: "var(--text-dim)" }}>Startups: </span><strong>{sel.startup_count}</strong></div>}
+                  {secs.length > 0 && (
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <span style={{ color: "var(--text-dim)" }}>Focus Areas: </span>
+                      {secs.map((s, i) => (
+                        <span key={i} style={{ display: "inline-block", background: "rgba(99,102,241,0.1)", color: "#4f46e5", borderRadius: "4px", padding: "0.1rem 0.4rem", fontSize: "0.75rem", marginRight: "0.3rem", marginTop: "0.2rem", fontWeight: 600 }}>{s}</span>
+                      ))}
+                    </div>
+                  )}
+                  {sel.description && (
+                    <div style={{ gridColumn: "1 / -1", color: "var(--text-dim)", fontSize: "0.78rem", marginTop: "0.2rem", lineHeight: 1.4 }}>
+                      {String(sel.description).slice(0, 200)}{String(sel.description).length > 200 ? "…" : ""}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="form-group">
-            <label>Party A Representative (Founder / Head)</label>
+            <label>Party A: InCubein Foundation Representative (Founder / Head)</label>
             <input 
               type="text" 
               className="form-input" 
@@ -659,7 +719,7 @@ export default function MouGenerator({ preselectedIncubatorName }) {
           <hr style={{ border: "none", borderTop: "1px solid var(--border-color)", margin: "0.5rem 0" }} />
 
           <div className="form-group">
-            <label>Party B: Startup / Mentor / Institution Name</label>
+            <label>Party B: Incubator / Collaborator Name</label>
             <input 
               type="text" 
               className="form-input" 

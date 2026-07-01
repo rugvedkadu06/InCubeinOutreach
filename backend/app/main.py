@@ -411,7 +411,7 @@ def send_mou_email(req: MouSendRequest):
             pass
             
     if not sender_email:
-        sender_email = "no-reply@rtmun.ac.in"
+        sender_email = "no-reply@incubeinfoundation.org"
 
     # Generate HTML content
     html_content = f"""
@@ -596,7 +596,7 @@ def send_contact_email(req: ContactSendRequest):
             pass
             
     if not sender_email:
-        sender_email = "no-reply@rtmun.ac.in"
+        sender_email = "no-reply@incubeinfoundation.org"
 
     # Generate HTML content
     datetime_section = ""
@@ -1428,7 +1428,7 @@ def trigger_outreach_email(req: OutreachEmailRequest):
     smtp_port = os.environ.get("SMTP_PORT", "587")
     smtp_user = os.environ.get("SMTP_USER")
     smtp_pass = os.environ.get("SMTP_PASS")
-    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@rtmun.ac.in"
+    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@incubeinfoundation.org"
     
     is_smtp_ready = smtp_host and smtp_user and smtp_pass and "your_email" not in smtp_user
     
@@ -1440,7 +1440,7 @@ def trigger_outreach_email(req: OutreachEmailRequest):
             from email.mime.text import MIMEText
             
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"Academic Partnership Opportunity - RTMUN Innovation Ecosystem"
+            msg["Subject"] = f"Academic Partnership Opportunity - InCubein Foundation Innovation Ecosystem"
             msg["From"] = sender_email
             msg["To"] = lead["email"]
             
@@ -1449,12 +1449,12 @@ Dear Representative,
 
 We hope this email finds you well. 
 
-We are reaching out from the RTMUN Startup Platform regarding a potential Strategic Cooperation and Academic Collaboration. We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.
+We are reaching out from the InCubein Foundation Startup Platform regarding a potential Strategic Cooperation and Academic Collaboration. We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.
 
 Please reply to this email to confirm your interest and schedule an introductory virtual meeting.
 
 Sincerely,
-RTMUN Innovation Portal Admin
+InCubein Foundation Innovation Portal Admin
             """
             msg.attach(MIMEText(body_text, "plain"))
             
@@ -1993,14 +1993,14 @@ def generate_ics_file_content(summary: str, description: str, date_str: str, tim
     ics_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//RTMUN Startup Platform//EN",
+        "PRODID:-//InCubein Foundation Startup Platform//EN",
         "CALSCALE:GREGORIAN",
         "METHOD:REQUEST",
         "BEGIN:VEVENT",
         f"DTSTART:{start_str}",
         f"DTEND:{end_str}",
         f"DTSTAMP:{dtstamp_str}",
-        f"ORGANIZER;CN=RTMUN Admin:mailto:{organizer_email}",
+        f"ORGANIZER;CN=InCubein Foundation Admin:mailto:{organizer_email}",
         f"ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={attendee_email}:mailto:{attendee_email}",
         f"UID:{uid}",
         f"SUMMARY:{esc_summary}",
@@ -2031,7 +2031,7 @@ def send_meeting_invite_email(lead_name: str, lead_email: str, date_str: str, ti
     smtp_port = os.environ.get("SMTP_PORT", "587")
     smtp_user = os.environ.get("SMTP_USER")
     smtp_pass = os.environ.get("SMTP_PASS")
-    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@rtmun.ac.in"
+    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@incubeinfoundation.org"
     
     if smtp_user:
         smtp_user = smtp_user.strip().strip('"').strip("'")
@@ -2048,7 +2048,7 @@ def send_meeting_invite_email(lead_name: str, lead_email: str, date_str: str, ti
     try:
         msg = MIMEMultipart("mixed")
         msg["Subject"] = f"Invitation: MOU Collaboration Discussion @ {date_str} {time_str}"
-        msg["From"] = f"RTMUN Outreach <{sender_email}>"
+        msg["From"] = f"InCubein Foundation Outreach <{sender_email}>"
         msg["To"] = lead_email
         
         summary = f"MOU Collaboration: {lead_name}"
@@ -2088,7 +2088,7 @@ def send_meeting_invite_email(lead_name: str, lead_email: str, date_str: str, ti
                     </div>
                     
                     <p>An interactive calendar invite has been attached to this email. You can RSVP directly using your email client's RSVP/buttons.</p>
-                    <p>Sincerely,<br><strong>RTMUN Innovation Portal Outreach Team</strong></p>
+                    <p>Sincerely,<br><strong>InCubein Foundation Innovation Portal Outreach Team</strong></p>
                 </div>
             </body>
         </html>
@@ -2194,7 +2194,7 @@ def google_oauth2callback(code: str, state: Optional[str] = None, error: Optiona
             <body style="font-family: sans-serif; text-align: center; padding-top: 5rem; background: #f8f9ff;">
                 <h2 style="color: #10b981;">✓ Google Calendar Authorization Successful!</h2>
                 <p>The outreach automation system has been authorized to schedule Google Meet meetings.</p>
-                <p style="color: #6b7280; font-size: 0.9rem;">You can close this tab and return to the RTMUN dashboard.</p>
+                <p style="color: #6b7280; font-size: 0.9rem;">You can close this tab and return to the InCubein Foundation dashboard.</p>
                 <script>
                     setTimeout(() => { window.close(); }, 5000);
                 </script>
@@ -2344,6 +2344,23 @@ def get_outreach_meetings():
     conn.close()
     return rows
 
+def cancel_google_calendar_event(calendar_event_id: str):
+    if not calendar_event_id or calendar_event_id.startswith("gcal_"):
+        return
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token.json")
+        if not os.path.exists(token_path):
+            print(f"Token path not found for cancelling event {calendar_event_id}")
+            return
+        credentials = Credentials.from_authorized_user_file(token_path)
+        service = build("calendar", "v3", credentials=credentials)
+        service.events().delete(calendarId='primary', eventId=calendar_event_id).execute()
+        print(f"Successfully deleted Google Calendar event: {calendar_event_id}")
+    except Exception as e:
+        print(f"Error deleting Google Calendar event {calendar_event_id}: {e}")
+
 @app.post("/api/outreach/meetings/update-status")
 def update_meeting_status(req: UpdateMeetingStatusRequest):
     conn = get_db_connection()
@@ -2364,11 +2381,36 @@ def update_meeting_status(req: UpdateMeetingStatusRequest):
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Meeting completed. Incubator removed from campaign and meetings."}
+    elif req.status.lower() == "cancelled":
+        if meeting["calendar_event_id"]:
+            cancel_google_calendar_event(meeting["calendar_event_id"])
+        cursor.execute("UPDATE scheduled_meetings SET status = ? WHERE id = ?", (req.status, req.meeting_id))
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": f"Meeting status updated to {req.status} and Google Calendar event cancelled."}
     else:
         cursor.execute("UPDATE scheduled_meetings SET status = ? WHERE id = ?", (req.status, req.meeting_id))
         conn.commit()
         conn.close()
         return {"status": "success", "message": f"Meeting status updated to {req.status}."}
+
+@app.delete("/api/outreach/meetings/{meeting_id}")
+def delete_meeting(meeting_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM scheduled_meetings WHERE id = ?", (meeting_id,))
+    meeting = cursor.fetchone()
+    if not meeting:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    if meeting["calendar_event_id"]:
+        cancel_google_calendar_event(meeting["calendar_event_id"])
+        
+    cursor.execute("DELETE FROM scheduled_meetings WHERE id = ?", (meeting_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "Meeting successfully removed from sync and Google Calendar cancelled."}
 
 @app.get("/api/outreach/calendar-events")
 def get_external_calendar_events():
