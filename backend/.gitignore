@@ -1,17 +1,26 @@
-# Environment variables
+@"
 .env
 
 # Virtual environments
-env/
-venv/
 .venv/
+venv/
+env/
 ENV/
 
-# Python caching
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Node.js modules
+# Node
 node_modules/
+
+# Frontend build
+frontend/dist/
+
+# Logs/debug
+*.log
+backend/scratch/mou_sent_log.txt
+backend/scratch/signature_debug.png
+"@ | Set-Content .gitignore

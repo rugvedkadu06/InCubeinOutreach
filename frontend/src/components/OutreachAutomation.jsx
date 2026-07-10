@@ -416,16 +416,72 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
 
     setTemplateFile(file);
 
-    // Read the file as text
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setTemplateText(event.target.result);
-      toast.success(`Template "${file.name}" uploaded successfully!`);
-    };
-    reader.onerror = () => {
-      toast.error("Failed to read template file.");
-    };
-    reader.readAsText(file);
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith(".docx")) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const arrayBuffer = event.target.result;
+        try {
+          if (!window.mammoth) {
+            throw new Error("Mammoth library is still loading or unavailable.");
+          }
+          const result = await window.mammoth.extractRawText({ arrayBuffer });
+          setTemplateText(result.value);
+          toast.success(`Template "${file.name}" uploaded and text parsed successfully!`);
+        } catch (err) {
+          toast.error(`Error parsing Word document: ${err.message}`);
+          console.error(err);
+        }
+      };
+      reader.onerror = () => {
+        toast.error("Failed to read template file.");
+      };
+      reader.readAsArrayBuffer(file);
+    } else if (fileName.endsWith(".pdf")) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const arrayBuffer = event.target.result;
+        try {
+          if (!window.pdfjsLib) {
+            throw new Error("PDF.js library is still loading or unavailable.");
+          }
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+          const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          let extractedText = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(" ");
+            extractedText += pageText + "\n";
+          }
+          if (!extractedText.trim()) {
+            toast.warning("PDF parsed, but no text content was found (it might be scanned/image-only).");
+          }
+          setTemplateText(extractedText);
+          toast.success(`Template "${file.name}" uploaded and text parsed successfully!`);
+        } catch (err) {
+          toast.error(`Error parsing PDF document: ${err.message}`);
+          console.error(err);
+        }
+      };
+      reader.onerror = () => {
+        toast.error("Failed to read template file.");
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // Fallback for .txt, .md, etc.
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setTemplateText(event.target.result);
+        toast.success(`Template "${file.name}" uploaded successfully!`);
+      };
+      reader.onerror = () => {
+        toast.error("Failed to read template file.");
+      };
+      reader.readAsText(file);
+    }
   };
 
   const removeTemplate = () => {
@@ -733,7 +789,7 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
               <div className="border-2 border-dashed border-outline-variant rounded-xl p-6 text-center hover:bg-surface-container-low transition-colors relative">
                 <input 
                   type="file" 
-                  accept=".txt,.md" 
+                  accept=".docx,.pdf,.txt,.md" 
                   onChange={handleTemplateUpload} 
                   ref={fileInputRef}
                   className="hidden" 
@@ -744,7 +800,10 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                   <label htmlFor="template-upload-input" className="cursor-pointer block space-y-2">
                     <span className="material-symbols-outlined text-4xl text-outline-variant">upload_file</span>
                     <p className="text-sm font-bold text-on-surface">Upload Template File</p>
-                    <p className="text-xs text-outline">Supported format: .txt, .md</p>
+                    <p className="text-xs text-outline mb-1">Supported formats: .docx, .pdf, .txt, .md</p>
+                    <div className="text-[10px] text-amber-700 bg-amber-500/5 p-2 rounded border border-amber-500/10 max-w-[280px] mx-auto leading-tight font-medium">
+                      Note: Word/PDF templates are converted to plain text. Rich formatting and tables are not preserved.
+                    </div>
                   </label>
                 ) : (
                   <div className="space-y-3">
@@ -934,6 +993,16 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                   <span className="material-symbols-outlined text-[18px]">format_underlined</span>
                 </div>
               </div>
+              
+              {templateFile && (templateFile.name.toLowerCase().endsWith(".docx") || templateFile.name.toLowerCase().endsWith(".pdf")) && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-start gap-3 text-xs text-amber-800 animate-fade-in">
+                  <span className="material-symbols-outlined text-[18px] text-amber-600 mt-0.5 select-none">warning</span>
+                  <div>
+                    <span className="font-bold">Backend Limitation Alert: </span>
+                    The email system only supports plain text payloads. Formatting, tables, and images from <strong>{templateFile.name}</strong> have been stripped. Only raw extracted text is preserved in this draft, preview, and the transmitted email.
+                  </div>
+                </div>
+              )}
 
               {/* Document Canvas */}
               <div className="flex-1 bg-surface-container-low p-8 overflow-y-auto editor-container flex justify-center">
