@@ -28,13 +28,13 @@
   --color-primary-container: #2563eb;
   --color-tertiary-fixed: #d3e4fe;
   --color-on-secondary-container: #5c647a;
-  --color-secondary: #0f172a;
+  --color-secondary: #0b0f19;
   --color-tertiary: #46566c;
   --color-tertiary-fixed-dim: #b7c8e1;
   --color-primary-fixed-dim: #b4c5ff;
   --color-primary: #2563eb;
   --color-surface-container-lowest: #ffffff;
-  --color-on-secondary-fixed: #0f172a;
+  --color-on-secondary-fixed: #0b0f19;
   --color-secondary-fixed: #dae2fd;
   --color-on-primary-fixed-variant: #003ea8;
   --color-surface-container-highest: #e1e3e4;
@@ -238,4 +238,25 @@ body {
 
 .login-btn:hover {
   background-color: #004ac6;
+}
+
+/* Horizontal pipeline step styling */
+.pipeline-step {
+  position: relative;
+}
+
+.pipeline-step::after {
+  content: '';
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 12px solid #ffffff;
+  border-top: 24px solid transparent;
+  border-bottom: 24px solid transparent;
+  z-index: 5;
+}
+
+.pipeline-step:last-child::after {
+  display: none;
 }

@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 
-export default function DirectoryView({ filtersData, onDraftMou }) {
+export default function DirectoryView({ filtersData, onDraftMou, globalSearchQuery, setGlobalSearchQuery }) {
   const [incubators, setIncubators] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Use globalSearchQuery if provided, fallback to local state
+  const [localSearchQuery, setLocalSearchQuery] = useState("");
+  const searchQuery = globalSearchQuery !== undefined ? globalSearchQuery : localSearchQuery;
+  const setSearchQuery = setGlobalSearchQuery !== undefined ? setGlobalSearchQuery : setLocalSearchQuery;
+
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedSector, setSelectedSector] = useState("");
@@ -144,7 +149,7 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
               className="bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md px-3 py-2 min-w-[140px] focus:ring-2 focus:ring-primary/10 outline-none text-on-surface"
             >
               <option value="">All Sectors</option>
-              {filtersData?.sectors?.map((sec) => (
+              {filtersData?.focus_areas?.map((sec) => (
                 <option key={sec} value={sec}>{sec}</option>
               )) || (
                 <>
@@ -185,9 +190,9 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
                 <tr>
                   <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Incubator Name</th>
                   <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Location</th>
-                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Sector</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Sector Focus</th>
                   <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Contact Email</th>
-                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Source</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Source Status</th>
                   <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant text-right">Actions</th>
                 </tr>
               </thead>
@@ -196,7 +201,7 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
                   <tr key={inc.id} className="hover:bg-surface-container transition-colors group">
                     <td className="py-4 px-6">
                       <div className="font-title-lg text-title-lg text-on-surface">{inc.name}</div>
-                      <div className="text-[11px] text-on-surface-variant font-medium">ESTD. {inc.year_established || 2018}</div>
+                      <div className="text-[11px] text-on-surface-variant font-medium">ESTD. {inc.year_established || "N/A"}</div>
                     </td>
                     <td className="py-4 px-6 text-body-md text-on-surface-variant">
                       {inc.city ? `${inc.city}, ` : ""}{inc.state}
@@ -207,12 +212,16 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
                       </span>
                     </td>
                     <td className="py-4 px-6 font-body-md text-primary hover:underline cursor-pointer">
-                      <a href={`mailto:${inc.email || "info@incubein.org"}`}>{inc.email || "info@incubein.org"}</a>
+                      {inc.email ? (
+                        <a href={`mailto:${inc.email}`}>{inc.email}</a>
+                      ) : (
+                        <span className="text-outline italic">No email</span>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 text-body-md text-on-surface-variant">
                         <div className={`w-2 h-2 rounded-full ${inc.status === "DST NIDHI" ? "bg-blue-400" : "bg-emerald-400"}`}></div>
-                        {inc.status || "DST NIDHI"}
+                        {inc.status || "resolved"}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
@@ -339,14 +348,20 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
                 <section>
                   <h4 className="font-display text-[24px] text-on-surface leading-tight mb-2">{activeDrawerInc.name}</h4>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    <span className="bg-primary-fixed text-on-primary-fixed text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Level 3 Incubator</span>
+                    {activeDrawerInc.status && (
+                      <span className="bg-primary-fixed text-on-primary-fixed text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                        {activeDrawerInc.status}
+                      </span>
+                    )}
                     <span className="bg-surface-container-high text-on-surface-variant text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                       {activeDrawerInc.city ? `${activeDrawerInc.city}, ` : ""}{activeDrawerInc.state}
                     </span>
                   </div>
-                  <p className="text-body-md text-on-surface-variant leading-relaxed">
-                    {activeDrawerInc.description || "Leading innovation center facilitating research commercialization, incubator cohorts, mentorship channels, and startup support."}
-                  </p>
+                  {activeDrawerInc.description && (
+                    <p className="text-body-md text-on-surface-variant leading-relaxed">
+                      {activeDrawerInc.description}
+                    </p>
+                  )}
                 </section>
                 
                 <hr className="border-outline-variant" />
@@ -357,48 +372,51 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
                     <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Sector Focus</p>
                     <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.organization_type || "Multi-Sector Technology"}</p>
                   </div>
-                  <div>
-                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Establishment Year</p>
-                    <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.year_established || 2014}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Current Startups</p>
-                    <p className="text-body-md text-on-surface font-medium">42 active ventures</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">MOU Status</p>
-                    <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[11px] uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Pending Review
-                    </span>
-                  </div>
+                  {activeDrawerInc.year_established && (
+                    <div>
+                      <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Establishment Year</p>
+                      <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.year_established}</p>
+                    </div>
+                  )}
+                  {activeDrawerInc.focus_areas && Array.isArray(activeDrawerInc.focus_areas) && (
+                    <div className="col-span-2">
+                      <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1.5">Focus Areas</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeDrawerInc.focus_areas.map((fa, i) => (
+                          <span key={i} className="text-[10px] bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold">
+                            {fa}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* Contact & Links */}
                 <section className="bg-surface-container-low p-5 rounded-xl space-y-4">
                   <h5 className="text-title-lg font-bold text-on-surface">Contact Information</h5>
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-primary text-[20px]">public</span>
-                    <div>
-                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Website</p>
-                      <a className="text-primary font-medium hover:underline break-all" href={activeDrawerInc.website || "#"} target="_blank" rel="noreferrer">
-                        {activeDrawerInc.website || "https://incubein.org"}
-                      </a>
+                  {activeDrawerInc.website && (
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-primary text-[20px]">public</span>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase text-on-surface-variant">Website</p>
+                        <a className="text-primary font-medium hover:underline break-all" href={activeDrawerInc.website} target="_blank" rel="noreferrer">
+                          {activeDrawerInc.website}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-primary text-[20px]">mail</span>
-                    <div>
-                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Primary Email</p>
-                      <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.email || "info@incubein.org"}</p>
+                  )}
+                  {activeDrawerInc.email && (
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-primary text-[20px]">mail</span>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase text-on-surface-variant">Primary Email</p>
+                        <a className="text-primary font-medium hover:underline break-all" href={`mailto:${activeDrawerInc.email}`}>
+                          {activeDrawerInc.email}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-primary text-[20px]">call</span>
-                    <div>
-                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Phone</p>
-                      <p className="text-body-md text-on-surface font-medium">+91 98640 12345</p>
-                    </div>
-                  </div>
+                  )}
                 </section>
               </div>
             </div>
@@ -406,10 +424,11 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
             {/* Drawer Footer */}
             <div className="p-6 border-t border-outline-variant bg-surface-container-lowest grid grid-cols-2 gap-4">
               <button 
-                onClick={() => toast.success("PDF report generated successfully.")}
-                className="w-full py-3 border border-outline text-on-surface font-medium rounded-lg hover:bg-surface-container transition-all cursor-pointer"
+                disabled
+                className="w-full py-3 border border-outline-variant text-outline font-medium rounded-lg cursor-not-allowed bg-surface-container-low"
+                title="PDF Report Generation is not supported by the backend"
               >
-                Download PDF Report
+                PDF Report Unavailable
               </button>
               <button 
                 onClick={() => {

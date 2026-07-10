@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 
+const STATE_COORDINATES = {
+  "maharashtra": { top: "60%", left: "45%" },
+  "karnataka": { top: "72%", left: "52%" },
+  "delhi": { top: "30%", left: "65%" },
+  "assam": { top: "38%", left: "82%" },
+  "gujarat": { top: "50%", left: "38%" },
+  "tamil nadu": { top: "82%", left: "58%" },
+  "telangana": { top: "65%", left: "58%" },
+  "uttar pradesh": { top: "35%", left: "70%" },
+  "west bengal": { top: "48%", left: "78%" }
+};
+
 export default function AnalyticsDashboard({ analyticsData, loading }) {
   const [meetings, setMeetings] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [loadingMeetings, setLoadingMeetings] = useState(true);
+  const [showAllStates, setShowAllStates] = useState(false);
 
-  // Fetch upcoming meetings & activities
+  // Fetch upcoming meetings, activities, & leads
   useEffect(() => {
     const fetchAuxiliaryData = async () => {
       try {
@@ -14,14 +28,21 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
         const meetingsRes = await fetch("http://127.0.0.1:8000/api/outreach/meetings");
         if (meetingsRes.ok) {
           const data = await meetingsRes.json();
-          setMeetings(data.slice(0, 3)); // show top 3
+          setMeetings(data.slice(0, 5)); // show up to 5
         }
 
         // Fetch Pipeline Logs as Activities
         const logsRes = await fetch("http://127.0.0.1:8000/api/pipeline/logs");
         if (logsRes.ok) {
           const data = await logsRes.json();
-          setActivities(data.slice(0, 3)); // show latest 3
+          setActivities(data.slice(0, 5)); // show latest 5
+        }
+
+        // Fetch Leads
+        const leadsRes = await fetch("http://127.0.0.1:8000/api/outreach/leads");
+        if (leadsRes.ok) {
+          const data = await leadsRes.json();
+          setLeads(data);
         }
       } catch (e) {
         console.error("Error fetching dashboard aux data:", e);
@@ -40,28 +61,38 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
     );
   }
 
-  // Fallback data if backend database is empty
+  // Real backend data
   const totals = analyticsData?.totals || {
-    incubators: 842,
-    states: 28,
-    cities: 145,
-    sectors: 12
+    incubators: 0,
+    states: 0,
+    cities: 0,
+    sectors: 0
   };
 
-  const stateDistribution = analyticsData?.state_distribution || [
-    { state: "Maharashtra", count: 184 },
-    { state: "Assam", count: 62 },
-    { state: "Karnataka", count: 142 }
-  ];
+  const stateDistribution = analyticsData?.state_distribution || [];
+  const sectorDistribution = analyticsData?.sector_distribution || [];
 
-  const sectorDistribution = analyticsData?.sector_distribution || [
-    { sector: "AI / Machine Learning", count: 42 },
-    { sector: "HealthTech", count: 28 },
-    { sector: "AgriTech", count: 18 },
-    { sector: "FinTech & Others", count: 12 }
-  ];
+  // Calculate dynamic metrics from leads
+  const mousSentCount = leads.filter(l => {
+    const s = (l.status || "").toLowerCase();
+    return s !== "draft" && s !== "";
+  }).length;
 
-  // Max value calculator for state bar percentages
+  const responsesCount = leads.filter(l => {
+    const s = (l.status || "").toLowerCase();
+    return ["replied", "interested", "meeting scheduled", "partnership completed"].includes(s);
+  }).length;
+
+  const meetingsCount = leads.filter(l => {
+    const s = (l.status || "").toLowerCase();
+    return s === "meeting scheduled";
+  }).length;
+
+  const partnershipsCount = leads.filter(l => {
+    const s = (l.status || "").toLowerCase();
+    return s === "partnership completed";
+  }).length;
+
   const maxStateVal = stateDistribution.length > 0 ? Math.max(...stateDistribution.map(s => s.count)) : 100;
 
   // Activity icon picker
@@ -80,9 +111,8 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
     }
   };
 
-  const getLogColor = (status) => {
-    return status === "ERROR" ? "bg-error-container/10 text-error" : "bg-primary/10 text-primary";
-  };
+  // Calculate sector percentages dynamically based on sum of counts
+  const totalSectorCount = sectorDistribution.reduce((acc, curr) => acc + curr.count, 0) || 1;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -93,9 +123,13 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
           <p className="text-on-surface-variant font-body-md">Monitoring performance across {totals.incubators} nationwide incubators.</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm font-medium hover:bg-surface-container-high flex items-center gap-2 transition-all cursor-pointer">
+          <button 
+            className="px-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm font-medium text-outline cursor-not-allowed flex items-center gap-2"
+            disabled
+            title="Date filtering not supported by backend"
+          >
             <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-            Last 30 Days
+            Last 30 Days (Disabled)
           </button>
           <button 
             className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-container flex items-center gap-2 transition-all shadow-sm cursor-pointer active:scale-95"
@@ -113,113 +147,133 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
         <div className="bento-card p-5 rounded-xl">
           <div className="flex items-center justify-between mb-4">
-            <span className="p-2 bg-primary-fixed/20 text-primary rounded-lg material-symbols-outlined">corporate_fare</span>
-            <span className="text-xs font-bold text-green-600 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs">trending_up</span> 4.2%
-            </span>
+            <span className="p-2 bg-primary/10 text-primary rounded-lg material-symbols-outlined">corporate_fare</span>
           </div>
           <p className="text-on-surface-variant text-label-md mb-1">Total Incubators</p>
-          <h3 className="text-3xl font-bold text-on-surface">{totals.incubators}</h3>
+          <h3 className="text-2xl font-bold text-on-surface">{totals.incubators}</h3>
         </div>
 
         <div className="bento-card p-5 rounded-xl">
           <div className="flex items-center justify-between mb-4">
-            <span className="p-2 bg-secondary-container/30 text-secondary rounded-lg material-symbols-outlined">description</span>
-            <span className="text-xs font-bold text-green-600 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs">trending_up</span> 12
-            </span>
+            <span className="p-2 bg-secondary/10 text-secondary rounded-lg material-symbols-outlined">description</span>
           </div>
           <p className="text-on-surface-variant text-label-md mb-1">MOUs Sent</p>
-          <h3 className="text-3xl font-bold text-on-surface">124</h3>
+          <h3 className="text-2xl font-bold text-on-surface">{mousSentCount}</h3>
         </div>
 
         <div className="bento-card p-5 rounded-xl">
           <div className="flex items-center justify-between mb-4">
-            <span className="p-2 bg-tertiary-fixed/30 text-tertiary rounded-lg material-symbols-outlined">group_work</span>
-            <span className="text-xs font-bold text-on-surface-variant">Active</span>
+            <span className="p-2 bg-tertiary/10 text-tertiary rounded-lg material-symbols-outlined">group_work</span>
           </div>
-          <p className="text-on-surface-variant text-label-md mb-1">Active Collaborations</p>
-          <h3 className="text-3xl font-bold text-on-surface">45</h3>
+          <p className="text-on-surface-variant text-label-md mb-1">Responses Received</p>
+          <h3 className="text-2xl font-bold text-on-surface">{responsesCount}</h3>
         </div>
 
         <div className="bento-card p-5 rounded-xl">
           <div className="flex items-center justify-between mb-4">
-            <span className="p-2 bg-green-100/10 text-green-600 rounded-lg material-symbols-outlined">verified</span>
-            <span className="text-xs font-bold text-green-600">+2</span>
+            <span className="p-2 bg-primary/10 text-primary rounded-lg material-symbols-outlined">event_available</span>
+          </div>
+          <p className="text-on-surface-variant text-label-md mb-1">Meetings Scheduled</p>
+          <h3 className="text-2xl font-bold text-on-surface">{meetingsCount}</h3>
+        </div>
+
+        <div className="bento-card p-5 rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <span className="p-2 bg-green-50 text-green-600 rounded-lg material-symbols-outlined">verified</span>
           </div>
           <p className="text-on-surface-variant text-label-md mb-1">Successful Partnerships</p>
-          <h3 className="text-3xl font-bold text-on-surface">12</h3>
-        </div>
-
-        <div className="bento-card p-5 rounded-xl">
-          <div className="flex items-center justify-between mb-4">
-            <span className="p-2 bg-error-container/10 text-error rounded-lg material-symbols-outlined">event</span>
-            <span className="text-xs font-bold text-error">Today</span>
-          </div>
-          <p className="text-on-surface-variant text-label-md mb-1">Upcoming Meetings</p>
-          <h3 className="text-3xl font-bold text-on-surface">{meetings.length > 0 ? meetings.length : 8}</h3>
+          <h3 className="text-2xl font-bold text-on-surface">{partnershipsCount}</h3>
         </div>
       </div>
 
       {/* Dashboard Main Grid */}
       <div className="grid grid-cols-12 gap-8">
         
-        {/* Center Analytics (8 columns) */}
+        {/* Left Section: Attention & Pipeline (8 columns) */}
         <div className="col-span-12 lg:col-span-8 space-y-8">
           
-          {/* Interactive Map Card */}
-          <div className="bento-card rounded-xl overflow-hidden shadow-sm">
-            <div className="p-5 border-b border-outline-variant flex items-center justify-between">
-              <h4 className="font-title-lg text-title-lg">Incubator Network Map</h4>
-              <div className="flex gap-4">
-                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-on-surface-variant">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> Tier 1
-                </span>
-                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-on-surface-variant">
-                  <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span> Tier 2
-                </span>
+          {/* Recent Activity */}
+          <div className="bento-card overflow-hidden">
+            <div className="p-5 border-b border-outline-variant flex items-center justify-between bg-surface-container-low/50">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-primary">history</span>
+                <h4 className="font-title-lg text-title-lg">Recent Activity</h4>
               </div>
+              <button 
+                onClick={() => toast.info("Activity console logs can be viewed in the Console tab.")} 
+                className="text-xs font-bold text-primary hover:underline cursor-pointer"
+              >
+                View All
+              </button>
             </div>
-
-            <div className="relative h-[420px] bg-surface-container-low group">
-              {/* Map Image Background */}
-              <div 
-                className="absolute inset-0 grayscale-[0.4] opacity-80 bg-cover bg-center w-full h-full" 
-                style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDFbURIMMKeDd4O2JgFFZHvl0dcwiGBOY3keE80AZgRQ6AKBIP12Jlb7kyUeuSoAQ_6XeAUYgm_amnoUptP5u9SrMgTnifckpkQ-9zzy1CNdOtqi-2psedWdtxc5HrVjG3_qLWpk4hh42IHfftBO65F3C7-8W8vSULgTYCOBYA4ZKgum7UR37BIgE4UdQEwnvJ4pCwgHFaR4Fp0sdKkFYFRNB6Ngfo_Ye6n-uAlk4DOttB9YHx2Lttm')" }}
-              />
-
-              {/* Cluster Markers */}
-              <div className="absolute top-[60%] left-[45%] group-hover:scale-110 transition-transform cursor-pointer">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-12 h-12 bg-primary/20 rounded-full animate-ping"></div>
-                  <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-lg border-2 border-white">242</div>
+            <div className="divide-y divide-outline-variant/30">
+              {activities.length > 0 ? (
+                activities.map((activity, idx) => (
+                  <div key={idx} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <span className="material-symbols-outlined text-[20px]">{getActivityIcon(activity.stage)}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-on-surface">
+                        <span className="uppercase text-xs font-bold text-primary mr-2">[{activity.stage}]</span>
+                        {activity.message}
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        Status: <span className={`font-semibold ${activity.status === "ERROR" ? "text-error" : "text-green-600"}`}>{activity.status}</span>
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-outline font-medium">
+                      {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recent"}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-outline italic text-xs">
+                  No recent ingestion logs found.
                 </div>
-              </div>
+              )}
+            </div>
+          </div>
 
-              <div className="absolute top-[72%] left-[52%] cursor-pointer hover:scale-110 transition-transform">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-12 h-12 bg-primary/20 rounded-full animate-ping" style={{ animationDelay: "1s" }}></div>
-                  <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-lg border-2 border-white">184</div>
-                </div>
+          {/* Horizontal Lifecycle Pipeline */}
+          <div className="bento-card p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h4 className="font-title-lg text-title-lg">MOU Lifecycle Pipeline</h4>
+              <a className="text-primary text-xs font-bold flex items-center gap-1 hover:underline" href="/outreach">
+                Full Report 
+                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+              </a>
+            </div>
+            <div className="flex items-stretch gap-1 h-16">
+              {/* Draft */}
+              <div className="flex-1 bg-slate-100 p-3 relative pipeline-step rounded-l-lg">
+                <p className="text-[10px] text-slate-500 font-bold uppercase">Draft</p>
+                <p className="text-xl font-bold">{leads.filter(l => (l.status || "Draft").toLowerCase() === "draft").length}</p>
               </div>
-
-              <div className="absolute top-[38%] left-[82%] cursor-pointer hover:scale-110 transition-transform">
-                <div className="w-6 h-6 bg-secondary text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-lg border-2 border-white">62</div>
+              {/* Sent */}
+              <div className="flex-1 bg-primary/10 p-3 relative pipeline-step text-primary">
+                <p className="text-[10px] text-primary font-bold uppercase">Sent</p>
+                <p className="text-xl font-bold font-semibold">{leads.filter(l => ["sent", "mou sent"].includes((l.status || "").toLowerCase())).length}</p>
               </div>
-
-              <div className="absolute top-[30%] left-[65%] cursor-pointer hover:scale-110 transition-transform">
-                <div className="w-6 h-6 bg-secondary text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-lg border-2 border-white">84</div>
+              {/* Interested */}
+              <div className="flex-1 bg-primary/20 p-3 relative pipeline-step text-primary">
+                <p className="text-[10px] text-primary font-bold uppercase">Interested</p>
+                <p className="text-xl font-bold font-semibold">{leads.filter(l => ["replied", "interested"].includes((l.status || "").toLowerCase())).length}</p>
               </div>
-
-              {/* Map Controls */}
-              <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-                <button className="w-8 h-8 bg-white border border-outline-variant rounded flex items-center justify-center text-on-surface hover:bg-surface shadow-sm cursor-pointer active:scale-95"><span className="material-symbols-outlined text-sm">add</span></button>
-                <button className="w-8 h-8 bg-white border border-outline-variant rounded flex items-center justify-center text-on-surface hover:bg-surface shadow-sm cursor-pointer active:scale-95"><span className="material-symbols-outlined text-sm">remove</span></button>
+              {/* Meeting */}
+              <div className="flex-1 bg-primary/30 p-3 relative pipeline-step text-primary">
+                <p className="text-[10px] text-primary font-bold uppercase">Meeting</p>
+                <p className="text-xl font-bold font-semibold">{leads.filter(l => (l.status || "").toLowerCase() === "meeting scheduled").length}</p>
+              </div>
+              {/* Completed */}
+              <div className="flex-1 bg-primary p-3 text-white rounded-r-lg">
+                <p className="text-[10px] text-white/80 font-bold uppercase">Completed</p>
+                <p className="text-xl font-bold">{leads.filter(l => (l.status || "").toLowerCase() === "partnership completed").length}</p>
               </div>
             </div>
           </div>
 
-          {/* Charts Grid */}
+          {/* Secondary Analytics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             {/* Sector Distribution */}
@@ -229,179 +283,157 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
                 {sectorDistribution.slice(0, 4).map((sector, idx) => {
                   const colors = ["bg-primary", "bg-secondary", "bg-tertiary-container", "bg-outline-variant"];
                   const countVal = typeof sector.count === 'number' ? sector.count : parseInt(sector.count) || 0;
+                  const pct = ((countVal / totalSectorCount) * 100).toFixed(1);
                   return (
                     <div key={sector.sector || idx} className="space-y-2">
                       <div className="flex justify-between text-label-md">
                         <span className="text-on-surface font-semibold">{sector.sector}</span>
-                        <span className="text-outline">{countVal}%</span>
+                        <span className="text-outline">{pct}% ({countVal})</span>
                       </div>
                       <div className="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
                         <div 
                           className={`h-full ${colors[idx % colors.length]} rounded-full`}
-                          style={{ width: `${countVal}%` }}
+                          style={{ width: `${pct}%` }}
                         />
                       </div>
                     </div>
                   );
                 })}
+                {sectorDistribution.length === 0 && (
+                  <p className="text-xs text-outline italic text-center py-4">No sector data available.</p>
+                )}
               </div>
             </div>
 
-            {/* Outreach Funnel */}
+            {/* Regional Performance (State distribution) */}
             <div className="bento-card p-6 rounded-xl shadow-sm">
-              <h4 className="font-title-lg text-title-lg mb-6">Outreach Performance</h4>
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-full bg-primary/90 h-8 rounded-t-lg flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-widest">Created: 842</div>
-                <div className="w-[85%] bg-primary/80 h-8 flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-widest">Sent: 612</div>
-                <div className="w-[60%] bg-primary/70 h-8 flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-widest">Interested: 245</div>
-                <div className="w-[40%] bg-primary/60 h-8 flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-widest">Meeting: 92</div>
-                <div className="w-[20%] bg-primary/50 h-8 rounded-b-lg flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-widest">Completed: 12</div>
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="font-title-lg text-title-lg">Regional Performance</h4>
+                {stateDistribution.length > 5 && (
+                  <button 
+                    onClick={() => setShowAllStates(!showAllStates)} 
+                    className="text-primary text-[12px] font-semibold hover:underline cursor-pointer"
+                  >
+                    {showAllStates ? "Show Less" : "View All"}
+                  </button>
+                )}
               </div>
-              <div className="mt-4 flex justify-between px-2">
-                <div className="text-center">
-                  <p className="text-[10px] text-outline font-bold uppercase">Conversion</p>
-                  <p className="text-title-lg text-primary">1.4%</p>
-                </div>
-                <div className="text-center border-l border-outline-variant pl-4">
-                  <p className="text-[10px] text-outline font-bold uppercase">Avg. Time</p>
-                  <p className="text-title-lg text-primary">18 Days</p>
-                </div>
+              <div className="space-y-4">
+                {(showAllStates ? stateDistribution : stateDistribution.slice(0, 5)).map((state, idx) => {
+                  const colors = ["bg-primary", "bg-secondary", "bg-primary"];
+                  const initials = (state.state || "IN").substring(0, 2).toUpperCase();
+                  return (
+                    <div key={state.state || idx} className="flex items-center gap-4">
+                      <div className="w-8 h-8 bg-surface-container-high rounded-full flex items-center justify-center font-bold text-on-surface-variant text-xs">{initials}</div>
+                      <div className="flex-1">
+                        <div className="flex justify-between mb-1 text-xs">
+                          <p className="font-semibold">{state.state}</p>
+                          <p className="text-outline">{state.count}</p>
+                        </div>
+                        <div className="w-full h-1.5 bg-surface-container-low rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${colors[idx % colors.length]} rounded-full`}
+                            style={{ width: `${(state.count / maxStateVal) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {stateDistribution.length === 0 && (
+                  <p className="text-xs text-outline italic text-center py-4">No state data available.</p>
+                )}
               </div>
             </div>
 
           </div>
         </div>
 
-        {/* Side Panel (4 columns) */}
-        <div className="col-span-12 lg:col-span-4 space-y-8">
+        {/* Right Section: Map & Meetings (4 columns) */}
+        <div className="col-span-12 lg:col-span-4 space-y-8 flex flex-col">
           
-          {/* State Distribution */}
-          <div className="bento-card p-6 rounded-xl shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h4 className="font-title-lg text-title-lg">State Distribution</h4>
-              <button className="text-primary text-[12px] font-semibold hover:underline cursor-pointer">View All</button>
+          {/* Network Map Card (h-48 approved Stitch layout) */}
+          <div className="bento-card overflow-hidden">
+            <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-surface-container-low/20">
+              <h4 className="font-title-lg text-title-lg">Network Map</h4>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter bg-surface-container-high px-2 py-0.5 rounded">Interactive</span>
             </div>
-            <div className="space-y-4">
-              {stateDistribution.slice(0, 3).map((state, idx) => {
-                const colors = ["bg-primary", "bg-secondary", "bg-primary"];
-                const initials = (state.state || "IN").substring(0, 2).toUpperCase();
-                return (
-                  <div key={state.state || idx} className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-surface-container-high rounded-full flex items-center justify-center font-bold text-on-surface-variant">{initials}</div>
-                    <div className="flex-1">
-                      <div className="flex justify-between mb-1">
-                        <p className="font-body-md font-semibold">{state.state}</p>
-                        <p className="text-label-md text-outline">{state.count}</p>
-                      </div>
-                      <div className="w-full h-1.5 bg-surface-container-low rounded-full">
-                        <div 
-                          className={`h-full ${colors[idx % colors.length]} rounded-full`}
-                          style={{ width: `${(state.count / maxStateVal) * 100}%` }}
-                        />
+
+            <div className="relative h-48 bg-surface-container-low group">
+              {/* Map Image Background */}
+              <div 
+                className="absolute inset-0 grayscale-[0.4] opacity-50 bg-cover bg-center w-full h-full" 
+                style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDFbURIMMKeDd4O2JgFFZHvl0dcwiGBOY3keE80AZgRQ6AKBIP12Jlb7kyUeuSoAQ_6XeAUYgm_amnoUptP5u9SrMgTnifckpkQ-9zzy1CNdOtqi-2psedWdtxc5HrVjG3_qLWpk4hh42IHfftBO65F3C7-8W8vSULgTYCOBYA4ZKgum7UR37BIgE4UdQEwnvJ4pCwgHFaR4Fp0sdKkFYFRNB6Ngfo_Ye6n-uAlk4DOttB9YHx2Lttm')" }}
+              />
+
+              {/* Dynamic State Markers Positioned on the Indian Map */}
+              {stateDistribution
+                .filter(s => s.state && STATE_COORDINATES[s.state.toLowerCase()] && s.count > 0)
+                .map((s) => {
+                  const coords = STATE_COORDINATES[s.state.toLowerCase()];
+                  return (
+                    <div 
+                      key={s.state} 
+                      className="absolute cursor-pointer hover:scale-110 transition-transform" 
+                      style={{ top: coords.top, left: coords.left }}
+                      title={`${s.state}: ${s.count} Incubators`}
+                    >
+                      <div className="relative flex items-center justify-center">
+                        <div className="absolute w-5 h-5 bg-primary/20 rounded-full animate-ping"></div>
+                        <div className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-[8px] font-bold shadow-lg border border-white">
+                          {s.count}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              }
+            </div>
+            
+            <div className="p-2.5 text-center border-t border-outline-variant/60 bg-surface-container-low/20">
+              <button 
+                onClick={() => toast.info("Opening full interactive map panel...")}
+                className="text-primary text-xs font-bold hover:underline cursor-pointer"
+              >
+                Open Full Map
+              </button>
+            </div>
+            
+            <div className="px-4 py-2 bg-surface-container-low border-t border-outline-variant/20">
+              <p className="text-[9px] text-outline italic">
+                Note: Map markers position dynamically grouped counts using frontend state-coordinate lookups.
+              </p>
             </div>
           </div>
 
           {/* Upcoming Meetings Widget */}
-          <div className="bento-card rounded-xl overflow-hidden shadow-sm">
+          <div className="bento-card rounded-xl overflow-hidden flex-1 flex flex-col">
             <div className="p-5 bg-surface-container-low border-b border-outline-variant flex items-center justify-between">
               <h4 className="font-title-lg text-title-lg">Upcoming Meetings</h4>
               <span className="bg-error text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                {meetings.length > 0 ? `${meetings.length} TODAY` : "8 TODAY"}
+                {meetings.length} TOTAL
               </span>
             </div>
-            <div className="p-2 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+            <div className="p-2 space-y-2 overflow-y-auto custom-scrollbar flex-1 max-h-[300px]">
               {meetings.length > 0 ? (
                 meetings.map((meeting) => (
                   <div key={meeting.id} className="p-3 hover:bg-surface-container-low rounded-lg transition-all border border-transparent hover:border-outline-variant flex items-start gap-4">
                     <div className="flex-shrink-0 text-center border-r border-outline-variant pr-3 min-w-[50px]">
-                      <p className="text-[10px] font-bold text-primary uppercase">{meeting.meeting_time || "10:30"}</p>
-                      <p className="text-[9px] font-medium text-outline uppercase">Time</p>
+                      <p className="text-[10px] font-bold text-primary uppercase">{meeting.time || "10:30"}</p>
+                      <p className="text-[9px] font-medium text-outline uppercase">{meeting.date || "Today"}</p>
                     </div>
                     <div className="flex-1 min-w-0">
                       <h5 className="text-[14px] font-bold text-on-surface leading-tight mb-1 truncate">{meeting.title || "Incubator Synch"}</h5>
                       <p className="text-[12px] text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px] text-primary">videocam</span> {meeting.platform || "Google Meet"}
+                        <span className="material-symbols-outlined text-[14px] text-primary">videocam</span> {meeting.meeting_link ? "Google Meet" : "Offline"}
                       </p>
                     </div>
-                    <button className="p-1 hover:bg-white rounded border border-outline-variant flex items-center justify-center self-center cursor-pointer"><span className="material-symbols-outlined text-[16px]">chevron_right</span></button>
                   </div>
                 ))
               ) : (
-                <>
-                  <div className="p-3 hover:bg-surface-container-low rounded-lg transition-all border border-transparent hover:border-outline-variant flex items-start gap-4">
-                    <div className="flex-shrink-0 text-center border-r border-outline-variant pr-3">
-                      <p className="text-[10px] font-bold text-primary uppercase">10:30</p>
-                      <p className="text-[10px] font-medium text-outline uppercase">AM</p>
-                    </div>
-                    <div className="flex-1">
-                      <h5 className="text-[14px] font-bold text-on-surface leading-tight mb-1">IIT Madras Hub Review</h5>
-                      <p className="text-[12px] text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">videocam</span> Google Meet
-                      </p>
-                    </div>
-                    <button className="p-1 hover:bg-white rounded border border-outline-variant flex items-center justify-center self-center cursor-pointer"><span className="material-symbols-outlined text-[16px]">chevron_right</span></button>
-                  </div>
-
-                  <div className="p-3 hover:bg-surface-container-low rounded-lg transition-all border border-transparent hover:border-outline-variant flex items-start gap-4">
-                    <div className="flex-shrink-0 text-center border-r border-outline-variant pr-3">
-                      <p className="text-[10px] font-bold text-primary uppercase">02:00</p>
-                      <p className="text-[10px] font-medium text-outline uppercase">PM</p>
-                    </div>
-                    <div className="flex-1">
-                      <h5 className="text-[14px] font-bold text-on-surface leading-tight mb-1">NIT Silchar MOU Signing</h5>
-                      <p className="text-[12px] text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">apartment</span> Room 402
-                      </p>
-                    </div>
-                    <button className="p-1 hover:bg-white rounded border border-outline-variant flex items-center justify-center self-center cursor-pointer"><span className="material-symbols-outlined text-[16px]">chevron_right</span></button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Activity Feed */}
-          <div className="bento-card p-6 rounded-xl shadow-sm">
-            <h4 className="font-title-lg text-title-lg mb-6">Recent Ingestion Activity</h4>
-            <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-0 before:w-[2px] before:bg-surface-container-high">
-              {activities.length > 0 ? (
-                activities.map((activity, idx) => (
-                  <div key={idx} className="relative pl-8">
-                    <div className={`absolute left-0 top-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-sm ${getLogColor(activity.status)}`}>
-                      <span className="material-symbols-outlined text-[12px] fill-icon font-bold">
-                        {getActivityIcon(activity.stage)}
-                      </span>
-                    </div>
-                    <p className="text-body-md text-on-surface-variant">
-                      <span className="font-bold text-on-surface uppercase text-xs">{activity.stage}</span> - {activity.message}
-                    </p>
-                    <span className="text-[11px] text-outline font-medium">
-                      {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString() : "Recent"}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <div className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                      <span className="material-symbols-outlined text-[14px] fill-icon">send</span>
-                    </div>
-                    <p className="text-body-md text-on-surface-variant">MOU sent to <span className="font-bold text-on-surface">NIT Silchar</span> for Biotech program.</p>
-                    <span className="text-[11px] text-outline font-medium">14 minutes ago</span>
-                  </div>
-                  <div className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-6 h-6 bg-success-container/20 text-green-600 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                      <span className="material-symbols-outlined text-[14px] fill-icon">check_circle</span>
-                    </div>
-                    <p className="text-body-md text-on-surface-variant">Partnership confirmed with <span className="font-bold text-on-surface">Kerala Startup Mission</span>.</p>
-                    <span className="text-[11px] text-outline font-medium">2 hours ago</span>
-                  </div>
-                </>
+                <div className="p-8 text-center text-outline italic text-xs">
+                  No upcoming meetings scheduled.
+                </div>
               )}
             </div>
           </div>
@@ -410,8 +442,8 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
       </div>
 
       {/* Footer Area */}
-      <footer className="mt-12 pt-8 border-t border-outline-variant flex flex-col md:flex-row justify-between items-center text-outline text-label-md">
-        <p className="">© 2024 Incubator Hub Management Portal. All rights reserved.</p>
+      <footer className="mt-12 pt-8 border-t border-outline-variant flex flex-col md:flex-row justify-between items-center text-outline text-label-md font-medium">
+        <p className="">© 2026 Incubator Hub Management Portal. All rights reserved.</p>
         <div className="flex gap-6 mt-4 md:mt-0">
           <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
           <a className="hover:text-primary transition-colors" href="#">Documentation</a>

@@ -83,6 +83,7 @@ function AppContent({ onLogout }) {
   const [mouPreselectedIncubator, setMouPreselectedIncubator] = useState("");
   const [outreachRefreshTrigger, setOutreachRefreshTrigger] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   
   const handleDraftMouFromFinder = (incubatorName) => {
     setMouPreselectedIncubator(incubatorName);
@@ -263,11 +264,13 @@ function AppContent({ onLogout }) {
             <div className="relative w-full group">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">search</span>
               <input 
-                className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" 
+                className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-on-surface" 
                 placeholder="Search incubators, partners, or states..." 
                 type="text"
+                value={globalSearchQuery}
                 onChange={(e) => {
-                  if (activePath !== "/directory") {
+                  setGlobalSearchQuery(e.target.value);
+                  if (location.pathname !== "/directory") {
                     navigate("/directory");
                   }
                 }}
@@ -319,7 +322,7 @@ function AppContent({ onLogout }) {
                 <AnalyticsDashboard analyticsData={analyticsData} loading={loading} />
               } />
               <Route path="/directory" element={
-                <DirectoryView filtersData={analyticsData ? analyticsData.filters : null} onDraftMou={handleDraftMouFromFinder} />
+                <DirectoryView filtersData={analyticsData ? analyticsData.filters : null} onDraftMou={handleDraftMouFromFinder} globalSearchQuery={globalSearchQuery} setGlobalSearchQuery={setGlobalSearchQuery} />
               } />
               <Route path="/outreach" element={
                 <OutreachAutomation preselectedIncubatorName={mouPreselectedIncubator} refreshTrigger={outreachRefreshTrigger} />

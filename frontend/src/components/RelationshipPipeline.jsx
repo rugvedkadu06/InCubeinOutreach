@@ -10,6 +10,14 @@ const STAGES = [
   { id: "Partnership Completed", label: "Partnership Completed" }
 ];
 
+const getNormalizedStatus = (status) => {
+  if (!status) return "Draft";
+  const s = status.toLowerCase();
+  if (s === "sent" || s === "mou sent") return "MOU Sent";
+  if (s === "replied" || s === "interested") return "Interested";
+  return status; // Draft, Awaiting Reply, Meeting Scheduled, Partnership Completed
+};
+
 export default function RelationshipPipeline() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +89,8 @@ export default function RelationshipPipeline() {
   };
 
   const getStatusBadgeClass = (status) => {
-    switch (status) {
+    const s = getNormalizedStatus(status);
+    switch (s) {
       case "Interested":
         return "bg-green-100 text-green-800";
       case "Awaiting Reply":
@@ -113,13 +122,13 @@ export default function RelationshipPipeline() {
   };
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col relative h-[calc(100vh-8rem)]">
+    <div className="flex-1 flex flex-col relative">
       {/* Notification Banner */}
       {showBanner && (
-        <div className="mb-8 p-4 bg-primary-fixed-dim text-on-primary-fixed-variant rounded-xl flex items-center justify-between shadow-sm border border-primary/10 animate-pulse" id="notification-banner">
+        <div className="mb-8 p-4 bg-primary-fixed-dim text-on-primary-fixed-variant rounded-xl flex items-center justify-between shadow-sm border border-primary/10 animate-fade-in" id="notification-banner">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>campaign</span>
-            <p className="font-title-lg text-title-lg">New Partnership Interest: <span className="font-bold">IIT Madras Bio-Incubator</span> just requested a draft MOU.</p>
+            <p className="font-title-lg text-title-lg">New Partnership Interest: <span className="font-bold">IIT Madras Bio-Incubator</span> just responded to outreach.</p>
           </div>
           <div className="flex gap-4">
             <button 
@@ -156,20 +165,20 @@ export default function RelationshipPipeline() {
         </div>
       </div>
 
-      {/* Kanban Scroller */}
+      {/* Kanban wrapping grid (No horizontal scrolling) */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-16">
           <span className="material-symbols-outlined spin text-4xl text-primary">sync</span>
         </div>
       ) : (
-        <div className="flex-1 overflow-x-auto hide-scrollbar pb-4 -mx-2 flex gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-12">
           {STAGES.map((stage) => {
-            const stageLeads = leads.filter(l => (l.status || "Draft").toLowerCase() === stage.id.toLowerCase());
+            const stageLeads = leads.filter(l => getNormalizedStatus(l.status).toLowerCase() === stage.id.toLowerCase());
             
             return (
               <div 
                 key={stage.id} 
-                className="kanban-column flex flex-col h-full bg-surface-container-low/50 rounded-xl p-3 border border-outline-variant/30"
+                className="flex flex-col bg-surface-container-low/50 rounded-xl p-4 border border-outline-variant/30 min-h-[200px]"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.id)}
               >
@@ -180,7 +189,7 @@ export default function RelationshipPipeline() {
                   <button onClick={() => toast.info(`Draft MOU to initiate campaign.`)} className="material-symbols-outlined text-outline hover:text-on-surface text-sm cursor-pointer">add</button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3 pr-1 hide-scrollbar min-h-[150px]">
+                <div className="flex-1 space-y-3">
                   {stageLeads.map((lead) => (
                     <div 
                       key={lead.id}
@@ -204,22 +213,22 @@ export default function RelationshipPipeline() {
                           Score: {lead.lead_score || 0}
                         </span>
                         
-                        {lead.status === "MOU Sent" && (
+                        {getNormalizedStatus(lead.status) === "MOU Sent" && (
                           <span className="flex items-center gap-1 text-primary">
                             <span className="material-symbols-outlined text-xs">send</span> Sent
                           </span>
                         )}
-                        {lead.status === "Awaiting Reply" && (
+                        {getNormalizedStatus(lead.status) === "Awaiting Reply" && (
                           <span className="flex items-center gap-1 text-error">
                             <span className="material-symbols-outlined text-xs">timer</span> Overdue
                           </span>
                         )}
-                        {lead.status === "Interested" && (
+                        {getNormalizedStatus(lead.status) === "Interested" && (
                           <span className="flex items-center gap-1 text-green-600 font-bold">
                             <span className="material-symbols-outlined text-xs">chat</span> New Reply
                           </span>
                         )}
-                        {lead.status === "Meeting Scheduled" && (
+                        {getNormalizedStatus(lead.status) === "Meeting Scheduled" && (
                           <span className="flex items-center gap-1 text-primary font-bold">
                             <span className="material-symbols-outlined text-xs">calendar_today</span> Meet Scheduled
                           </span>
@@ -229,7 +238,7 @@ export default function RelationshipPipeline() {
                   ))}
 
                   {stageLeads.length === 0 && (
-                    <div className="h-full flex items-center justify-center border border-dashed border-outline-variant/40 rounded-lg p-6 text-center text-xs text-outline italic">
+                    <div className="h-24 flex items-center justify-center border border-dashed border-outline-variant/40 rounded-lg p-6 text-center text-xs text-outline italic">
                       Drag cards here
                     </div>
                   )}
@@ -248,7 +257,7 @@ export default function RelationshipPipeline() {
             {/* Drawer Header */}
             <div className="p-6 border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
               <div>
-                <h3 className="font-headline-md text-headline-md text-on-surface">Incubator Profile</h3>
+                <h3 className="font-headline-md text-headline-md text-on-surface">Lead Profile</h3>
                 <p className="text-body-md text-on-surface-variant">Detailed campaign and lead pipeline overview</p>
               </div>
               <button className="p-2 hover:bg-surface-container-high rounded-full transition-all cursor-pointer" onClick={closeDrawer}>
@@ -291,33 +300,9 @@ export default function RelationshipPipeline() {
                     <h4 className="font-label-md text-label-md text-outline mb-2">LATEST CORRESPONDENCE</h4>
                     <div className="p-4 bg-surface-container-low rounded-lg border border-outline-variant/30 text-sm">
                       <p className="text-body-md italic text-on-surface-variant">
-                        {selectedLead.notes || `"We've reviewed the preliminary MOU draft. The section on IP sharing requires a quick call with our legal head, but overall we are excited to move forward next month."`}
+                        {selectedLead.notes ? `"${selectedLead.notes}"` : "No notes recorded yet."}
                       </p>
-                      <p className="text-[11px] mt-3 text-primary font-bold">Updated Recently</p>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <button 
-                      onClick={() => {
-                        toast.info("Opening Scheduler in Outreach Automation...");
-                        closeDrawer();
-                      }}
-                      className="flex flex-col items-center gap-2 p-4 border border-outline-variant rounded-xl hover:bg-primary hover:text-white hover:border-primary transition-all cursor-pointer active:scale-95 text-on-surface hover:text-white"
-                    >
-                      <span className="material-symbols-outlined">calendar_month</span>
-                      <span className="text-label-md font-bold">Schedule Call</span>
-                    </button>
-                    <button 
-                      onClick={() => {
-                        toast.info("Opening MOU generator...");
-                        closeDrawer();
-                      }}
-                      className="flex flex-col items-center gap-2 p-4 border border-outline-variant rounded-xl hover:bg-primary hover:text-white hover:border-primary transition-all cursor-pointer active:scale-95 text-on-surface hover:text-white"
-                    >
-                      <span className="material-symbols-outlined">edit_document</span>
-                      <span className="text-label-md font-bold">Edit MOU</span>
-                    </button>
                   </div>
 
                   <div className="pt-6 border-t border-outline-variant">
@@ -346,7 +331,7 @@ export default function RelationshipPipeline() {
             {/* Drawer Footer */}
             <div className="p-6 border-t border-outline-variant bg-surface-container-lowest grid grid-cols-2 gap-4">
               <button 
-                onClick={() => toast.success("Correspondence logged.")}
+                onClick={() => toast.success("Correspondence log placeholder")}
                 className="w-full py-3 border border-outline text-on-surface font-medium rounded-lg hover:bg-surface-container transition-all cursor-pointer"
               >
                 Log Call Details
