@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { Search, MapPin, Globe, Mail, Phone, ExternalLink, Calendar, Building, HelpCircle, Layers, FileSignature, Send, X } from "lucide-react";
 
 export default function DirectoryView({ filtersData, onDraftMou }) {
   const [incubators, setIncubators] = useState([]);
@@ -10,21 +9,16 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedSector, setSelectedSector] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("");
-  const [sortMode, setSortMode] = useState("name");
   
   // Drawer state
   const [activeDrawerInc, setActiveDrawerInc] = useState(null);
+  const [showDrawer, setShowDrawer] = useState(false);
 
-  // Call Scheduler Modal states
-  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [meetingSubject, setMeetingSubject] = useState("");
-  const [meetingMessage, setMeetingMessage] = useState("");
-  const [meetingDate, setMeetingDate] = useState("");
-  const [meetingTime, setMeetingTime] = useState("");
-  const [sendingContact, setSendingContact] = useState(false);
-  const [contactStatus, setContactStatus] = useState(null);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
 
-  // Fetch incubators based on filters
+  // Fetch from backend
   const fetchIncubators = async () => {
     setLoading(true);
     try {
@@ -36,618 +30,401 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
       if (selectedRegion) url += `&region=${encodeURIComponent(selectedRegion)}`;
 
       const res = await fetch(url);
-      const data = await res.json();
-      setIncubators(data);
+      if (res.ok) {
+        const data = await res.json();
+        setIncubators(data);
+        setCurrentPage(1); // reset to first page on search
+      }
     } catch (e) {
       console.error("Error fetching incubators:", e);
+      toast.error("Failed to connect to backend database.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Debounce fetching if query changes
     const timer = setTimeout(() => {
       fetchIncubators();
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, selectedState, selectedCity, selectedSector, selectedRegion]);
 
-  // Editing state for updating contact details
-  const [isEditing, setIsEditing] = useState(false);
-  const [editEmail, setEditEmail] = useState("");
-  const [editWebsite, setEditWebsite] = useState("");
-  const [savingContact, setSavingContact] = useState(false);
+  // Client side pagination math
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = incubators.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(incubators.length / itemsPerPage) || 1;
 
-  useEffect(() => {
-    setIsEditing(false);
-    setIsScheduleModalOpen(false);
-    setContactStatus(null);
-    if (activeDrawerInc) {
-      setEditEmail(activeDrawerInc.email || "");
-      setEditWebsite(activeDrawerInc.website || "");
-      setMeetingSubject(`Inquiry & Meeting Request: ${activeDrawerInc.name}`);
-      setMeetingMessage(`Dear Team,\n\nWe are writing to express interest in exploring incubation and collaboration opportunities at ${activeDrawerInc.name}.\n\nCould we arrange a brief call to discuss this further?\n\nBest regards,\n[Startup Representative]`);
-      setMeetingDate("");
-      setMeetingTime("");
-    }
-  }, [activeDrawerInc]);
-
-  const handleSaveContactInfo = async (e) => {
-    e.preventDefault();
-    if (!activeDrawerInc) return;
-    setSavingContact(true);
-    try {
-      const response = await fetch("http://127.0.0.1:8000/api/incubators/update-contact", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: activeDrawerInc.id,
-          email: editEmail,
-          website: editWebsite
-        })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        const updatedInc = { ...activeDrawerInc, email: editEmail, website: editWebsite };
-        setActiveDrawerInc(updatedInc);
-        setIncubators(prev => prev.map(inc => inc.id === updatedInc.id ? updatedInc : inc));
-        setIsEditing(false);
-      } else {
-        toast.error("Error saving contact: " + (data.detail || "Unknown error"));
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to connect to the backend server.");
-    } finally {
-      setSavingContact(false);
+  const handlePageChange = (pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
     }
   };
 
-  const handleSendContact = async (e) => {
-    e.preventDefault();
-    if (!activeDrawerInc) return;
-    
-    const emailToUse = activeDrawerInc.email || editEmail;
-    if (!emailToUse) {
-      toast.warning("No email address available for this incubator. Please click 'Edit Contact' to add one first.");
-      return;
-    }
-    
-    setSendingContact(true);
-    setContactStatus(null);
-    
-    const postData = {
-      incubator_name: activeDrawerInc.name,
-      recipient_email: emailToUse,
-      subject: meetingSubject,
-      message: meetingMessage,
-      meeting_date: meetingDate || null,
-      meeting_time: meetingTime || null
-    };
-    
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/contact/send", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(postData)
-      });
-      
-      const result = await res.json();
-      if (res.ok) {
-        if (result.status === "mock_success") {
-          setContactStatus({
-            type: "mock",
-            message: `Message Simulated! [DEVELOPER MOCK MODE] Since SMTP is not configured in env variables, the schedule details were successfully saved to backend file log: f:\\WorkForRTMUN\\backend\\scratch\\contact_sent_log.txt`
-          });
-        } else {
-          setContactStatus({
-            type: "success",
-            message: "Inquiry and call arrangement request successfully sent via SMTP email!"
-          });
-        }
-      } else {
-        setContactStatus({
-          type: "error",
-          message: `Error sending contact request: ${result.detail || "Server error"}`
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      setContactStatus({
-        type: "error",
-        message: "Failed to connect to contact email API endpoint."
-      });
-    } finally {
-      setSendingContact(false);
-    }
+  const openDrawer = (incubator) => {
+    setActiveDrawerInc(incubator);
+    setShowDrawer(true);
   };
 
-  const getSortedIncubators = () => {
-    let list = [...incubators];
-    if (sortMode === "region") {
-      const regionOrder = { "North": 1, "South": 2, "West": 3, "East": 4, "Central": 5, "Northeast": 6, "Unknown": 7 };
-      list.sort((a, b) => {
-        const rA = a.region || "Unknown";
-        const rB = b.region || "Unknown";
-        return (regionOrder[rA] || 99) - (regionOrder[rB] || 99);
-      });
-    } else if (sortMode === "name") {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      // default: sorted by name
-      list.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return list;
+  const closeDrawer = () => {
+    setShowDrawer(false);
   };
 
   return (
-    <div>
-      {/* Filtering Bar */}
-      <div className="filter-bar" style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.5rem" }}>
-        {/* Search */}
-        <div style={{ position: "relative", minWidth: "200px", flexGrow: 1 }}>
-          <Search size={16} style={{ position: "absolute", left: "10px", top: "12px", color: "var(--text-dim)" }} />
-          <input
-            type="text"
-            className="search-input"
-            style={{ paddingLeft: "2.25rem", width: "100%" }}
-            placeholder="Search by name, source..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div className="space-y-8 animate-fade-in relative">
+      {/* Page Header & Filters */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+        <div>
+          <h2 className="font-display text-display text-on-surface mb-2">Incubator Directory</h2>
+          <p className="font-body-lg text-body-lg text-on-surface-variant">
+            Manage and explore {loading ? "registered" : incubators.length} incubators across the ecosystem.
+          </p>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold uppercase text-on-surface-variant px-1">Keyword</label>
+            <div className="relative">
+              <input 
+                type="text"
+                className="bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md px-3 py-1.5 pl-8 focus:ring-2 focus:ring-primary/10 w-44 outline-none text-on-surface"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
+            </div>
+          </div>
 
-        {/* Regions */}
-        <select
-          className="filter-select"
-          value={selectedRegion}
-          onChange={(e) => {
-            setSelectedRegion(e.target.value);
-            setSelectedState("");
-            setSelectedCity("");
-          }}
-        >
-          <option value="">All Regions</option>
-          <option value="North">North</option>
-          <option value="South">South</option>
-          <option value="East">East</option>
-          <option value="West">West</option>
-          <option value="Central">Central</option>
-          <option value="Northeast">Northeast</option>
-        </select>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold uppercase text-on-surface-variant px-1">State</label>
+            <select 
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+              className="bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md px-3 py-2 min-w-[140px] focus:ring-2 focus:ring-primary/10 outline-none text-on-surface"
+            >
+              <option value="">All States</option>
+              {filtersData?.states?.map((st) => (
+                <option key={st} value={st}>{st}</option>
+              )) || (
+                <>
+                  <option value="Assam">Assam</option>
+                  <option value="Karnataka">Karnataka</option>
+                  <option value="Maharashtra">Maharashtra</option>
+                </>
+              )}
+            </select>
+          </div>
 
-        {/* States */}
-        <select
-          className="filter-select"
-          value={selectedState}
-          onChange={(e) => setSelectedState(e.target.value)}
-        >
-          <option value="">All States</option>
-          {filtersData && filtersData.states && filtersData.states.map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold uppercase text-on-surface-variant px-1">City</label>
+            <select 
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
+              className="bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md px-3 py-2 min-w-[140px] focus:ring-2 focus:ring-primary/10 outline-none text-on-surface"
+            >
+              <option value="">All Cities</option>
+              {filtersData?.cities?.map((ct) => (
+                <option key={ct} value={ct}>{ct}</option>
+              )) || (
+                <>
+                  <option value="Silchar">Silchar</option>
+                  <option value="Guwahati">Guwahati</option>
+                  <option value="Bangalore">Bangalore</option>
+                </>
+              )}
+            </select>
+          </div>
 
-        {/* Cities */}
-        <select
-          className="filter-select"
-          value={selectedCity}
-          onChange={(e) => setSelectedCity(e.target.value)}
-        >
-          <option value="">All Cities</option>
-          {filtersData && filtersData.cities && filtersData.cities.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold uppercase text-on-surface-variant px-1">Sector</label>
+            <select 
+              value={selectedSector}
+              onChange={(e) => setSelectedSector(e.target.value)}
+              className="bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md px-3 py-2 min-w-[140px] focus:ring-2 focus:ring-primary/10 outline-none text-on-surface"
+            >
+              <option value="">All Sectors</option>
+              {filtersData?.sectors?.map((sec) => (
+                <option key={sec} value={sec}>{sec}</option>
+              )) || (
+                <>
+                  <option value="Digital Technology">Digital Technology</option>
+                  <option value="Bio-Tech">Bio-Tech</option>
+                  <option value="Agri-Tech">Agri-Tech</option>
+                </>
+              )}
+            </select>
+          </div>
 
-        {/* Focus Areas */}
-        <select
-          className="filter-select"
-          value={selectedSector}
-          onChange={(e) => setSelectedSector(e.target.value)}
-        >
-          <option value="">All Sectors</option>
-          {filtersData && filtersData.focus_areas && filtersData.focus_areas.map(sec => (
-            <option key={sec} value={sec}>{sec}</option>
-          ))}
-        </select>
-
-        {/* Sort Order */}
-        <select
-          className="filter-select"
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value)}
-        >
-          <option value="name">Sort: Name (A-Z)</option>
-          <option value="region">Sort: Region Partition</option>
-        </select>
-
-        {/* Clear Filters Button */}
-        {(searchQuery || selectedState || selectedCity || selectedSector || selectedRegion || sortMode !== "name") && (
           <button 
-            className="btn btn-secondary"
             onClick={() => {
-              setSearchQuery("");
               setSelectedState("");
               setSelectedCity("");
               setSelectedSector("");
               setSelectedRegion("");
-              setSortMode("name");
+              setSearchQuery("");
             }}
+            className="h-[38px] mt-auto px-4 bg-surface-container-highest text-on-surface-variant rounded-lg flex items-center gap-2 hover:bg-surface-variant transition-all font-medium cursor-pointer active:scale-95"
           >
-            Reset Filters
+            <span className="material-symbols-outlined text-[18px]">filter_list</span>
+            <span>Reset</span>
           </button>
+        </div>
+      </div>
+
+      {/* Data Table Card */}
+      <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center min-h-[300px]">
+            <span className="material-symbols-outlined spin text-4xl text-primary">sync</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-surface-container-low">
+                <tr>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Incubator Name</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Location</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Sector</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Contact Email</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant">Source</th>
+                  <th className="py-4 px-6 font-label-md text-label-md text-on-surface-variant border-b border-outline-variant text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/50">
+                {currentItems.map((inc) => (
+                  <tr key={inc.id} className="hover:bg-surface-container transition-colors group">
+                    <td className="py-4 px-6">
+                      <div className="font-title-lg text-title-lg text-on-surface">{inc.name}</div>
+                      <div className="text-[11px] text-on-surface-variant font-medium">ESTD. {inc.year_established || 2018}</div>
+                    </td>
+                    <td className="py-4 px-6 text-body-md text-on-surface-variant">
+                      {inc.city ? `${inc.city}, ` : ""}{inc.state}
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="bg-primary-fixed text-on-primary-fixed text-[11px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                        {inc.organization_type || "Technology"}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 font-body-md text-primary hover:underline cursor-pointer">
+                      <a href={`mailto:${inc.email || "info@incubein.org"}`}>{inc.email || "info@incubein.org"}</a>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2 text-body-md text-on-surface-variant">
+                        <div className={`w-2 h-2 rounded-full ${inc.status === "DST NIDHI" ? "bg-blue-400" : "bg-emerald-400"}`}></div>
+                        {inc.status || "DST NIDHI"}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          className="text-primary-container font-medium text-body-md hover:bg-primary-fixed px-3 py-1.5 rounded-lg transition-all cursor-pointer active:scale-95" 
+                          onClick={() => openDrawer(inc)}
+                        >
+                          View Details
+                        </button>
+                        <button 
+                          onClick={() => {
+                            onDraftMou(inc.name);
+                            toast.success(`Drafting MOU with ${inc.name}`);
+                          }}
+                          className="p-2 text-on-surface-variant hover:text-primary-container hover:bg-surface-container-high rounded-full transition-all cursor-pointer" 
+                          title="Create MOU"
+                        >
+                          <span className="material-symbols-outlined">handshake</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {incubators.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="py-12 text-center text-outline italic">
+                      No registered incubators found matching selected filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination Footer */}
+        {!loading && incubators.length > 0 && (
+          <div className="bg-surface-container-low px-6 py-4 flex items-center justify-between border-t border-outline-variant">
+            <p className="text-body-md text-on-surface-variant">
+              Showing <span className="font-bold text-on-surface">{indexOfFirstItem + 1} - {Math.min(indexOfLastItem, incubators.length)}</span> of {incubators.length} incubators
+            </p>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handlePageChange(currentPage - 1)}
+                className="p-2 text-on-surface-variant bg-surface-container-lowest border border-outline-variant rounded hover:bg-surface-variant disabled:opacity-50 cursor-pointer"
+                disabled={currentPage === 1}
+              >
+                <span className="material-symbols-outlined">chevron_left</span>
+              </button>
+              
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const page = i + 1;
+                return (
+                  <button 
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`px-3 py-1 rounded font-medium cursor-pointer ${currentPage === page ? "bg-primary text-white" : "hover:bg-surface-container-high text-on-surface-variant"}`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+
+              {totalPages > 5 && (
+                <>
+                  <span className="px-1 text-outline">...</span>
+                  <button 
+                    onClick={() => handlePageChange(totalPages)}
+                    className={`px-3 py-1 rounded font-medium cursor-pointer hover:bg-surface-container-high text-on-surface-variant ${currentPage === totalPages ? "bg-primary text-white" : ""}`}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+
+              <button 
+                onClick={() => handlePageChange(currentPage + 1)}
+                className="p-2 text-on-surface-variant bg-surface-container-lowest border border-outline-variant rounded hover:bg-surface-variant disabled:opacity-50 cursor-pointer"
+                disabled={currentPage === totalPages}
+              >
+                <span className="material-symbols-outlined">chevron_right</span>
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Main Grid View */}
-      {loading ? (
-        <div className="empty-state">
-          <p>Filtering startup incubators...</p>
-        </div>
-      ) : incubators.length === 0 ? (
-        <div className="empty-state">
-          <h3>No Incubators Found</h3>
-          <p>Adjust your search queries or select different filters.</p>
-        </div>
-      ) : (
-        <div className="directory-grid">
-          {getSortedIncubators().map((inc) => (
-            <div 
-              key={inc.id} 
-              className="glass-card directory-card"
-              style={{ cursor: "pointer" }}
-              onClick={() => setActiveDrawerInc(inc)}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                <span style={{ 
-                  fontSize: "0.75rem", 
-                  padding: "2px 8px", 
-                  borderRadius: "4px", 
-                  background: "rgba(6, 182, 212, 0.12)", 
-                  color: "var(--secondary)", 
-                  fontWeight: 600 
-                }}>
-                  {inc.region || "Unknown"}
-                </span>
-                <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                  Source: {inc.source_url || "Excel"}
-                </span>
+      {/* Slide-over Drawer Overlay */}
+      {showDrawer && activeDrawerInc && (
+        <>
+          <div className="fixed inset-0 bg-on-surface/40 backdrop-blur-sm z-50 transition-opacity" onClick={closeDrawer}></div>
+          <div className="fixed top-0 right-0 h-full w-full max-w-lg bg-surface shadow-2xl z-[60] flex flex-col animate-slide-in">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
+              <div>
+                <h3 className="font-headline-md text-headline-md text-on-surface">Incubator Profile</h3>
+                <p className="text-body-md text-on-surface-variant">Detailed institutional overview</p>
               </div>
-              
-              <h2 className="card-title">{inc.name}</h2>
-              <p className="card-description">{inc.description}</p>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", margin: "1rem 0", padding: "0.75rem 0", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)" }}>
-                {inc.website && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
-                    <Globe size={14} style={{ color: "var(--secondary)", flexShrink: 0 }} />
-                    <a href={inc.website.startsWith("http") ? inc.website : `https://${inc.website}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "var(--text-primary)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {inc.website}
-                    </a>
-                  </div>
-                )}
-                {inc.email && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
-                    <Mail size={14} style={{ color: "var(--primary)", flexShrink: 0 }} />
-                    <a href={`mailto:${inc.email}`} onClick={(e) => e.stopPropagation()} style={{ color: "var(--text-primary)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {inc.email}
-                    </a>
-                  </div>
-                )}
-              </div>
-              
-              <div className="card-meta">
-                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <MapPin size={12} style={{ color: "var(--primary)" }} />
-                  <span>{inc.city ? `${inc.city}, ` : ""}{inc.state}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Drawer Details Overlay */}
-      {activeDrawerInc && (
-        <div className="drawer-backdrop" onClick={() => setActiveDrawerInc(null)}>
-          <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
-            <button className="drawer-close" onClick={() => setActiveDrawerInc(null)}>✕ Close</button>
-            
-            <div className="drawer-header">
-              <h2 style={{ fontSize: "1.75rem", fontWeight: "800", color: "white", marginBottom: "0.5rem" }}>{activeDrawerInc.name}</h2>
-              <div style={{ display: "flex", gap: "1rem", color: "var(--text-muted)", fontSize: "0.85rem", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <MapPin size={14} style={{ color: "var(--primary)" }} />
-                  <span>{activeDrawerInc.city ? `${activeDrawerInc.city}, ` : ""}{activeDrawerInc.state}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <span style={{ 
-                    fontSize: "0.75rem", 
-                    padding: "2px 8px", 
-                    borderRadius: "4px", 
-                    background: "rgba(6, 182, 212, 0.12)", 
-                    color: "var(--secondary)", 
-                    fontWeight: 600 
-                  }}>
-                    {activeDrawerInc.region || "Unknown"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons: Draft MOU & Schedule Call */}
-            <div className="drawer-section" style={{ borderTop: "none", display: "flex", gap: "0.75rem", paddingBottom: "1.25rem", paddingTop: "0" }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "0.6rem" }}
-                onClick={() => {
-                  if (onDraftMou) {
-                    onDraftMou(activeDrawerInc.name);
-                  }
-                }}
-              >
-                <FileSignature size={16} />
-                <span>Draft & Sign MOU</span>
-              </button>
-              
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "0.6rem" }}
-                onClick={() => setIsScheduleModalOpen(true)}
-              >
-                <Calendar size={16} />
-                <span>Contact / Arrange Call</span>
+              <button className="p-2 hover:bg-surface-container-high rounded-full transition-all cursor-pointer" onClick={closeDrawer}>
+                <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            {/* Description */}
-            <div className="drawer-section" style={{ borderTop: "1px solid var(--border-color)", paddingTop: "1.25rem" }}>
-              <h3>About</h3>
-              <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", lineHeight: "1.6" }}>{activeDrawerInc.description}</p>
-            </div>
-
-            {/* Contact Details */}
-            <div className="drawer-section">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h3 style={{ margin: 0 }}>Contact Info</h3>
-                {!isEditing && (
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} 
-                    onClick={() => setIsEditing(true)}
-                  >
-                    Edit Contact
-                  </button>
-                )}
-              </div>
-
-              {isEditing ? (
-                <form onSubmit={handleSaveContactInfo} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "600", marginBottom: "0.25rem", color: "var(--text-dim)" }}>Website URL</label>
-                      <input 
-                        type="text" 
-                        className="search-input" 
-                        style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", background: "#f8fafc", color: "var(--text-primary)", border: "1px solid var(--border-color)" }}
-                        value={editWebsite}
-                        onChange={(e) => setEditWebsite(e.target.value)}
-                        placeholder="e.g. https://sine.iitb.ac.in"
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "600", marginBottom: "0.25rem", color: "var(--text-dim)" }}>Email Address</label>
-                      <input 
-                        type="email" 
-                        className="search-input" 
-                        style={{ width: "100%", padding: "0.5rem", fontSize: "0.85rem", background: "#f8fafc", color: "var(--text-primary)", border: "1px solid var(--border-color)" }}
-                        value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
-                        placeholder="e.g. contact@domain.org"
-                      />
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                    <button 
-                      type="button"
-                      className="btn btn-secondary" 
-                      style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
-                      onClick={() => setIsEditing(false)}
-                      disabled={savingContact}
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="btn btn-primary" 
-                      style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
-                      disabled={savingContact}
-                    >
-                      {savingContact ? "Saving..." : "Save Changes"}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="details-grid">
-                  <div>
-                    <div className="detail-item-label">Website</div>
-                    {activeDrawerInc.website ? (
-                      <div className="detail-item-val">
-                        <a href={activeDrawerInc.website.startsWith("http") ? activeDrawerInc.website : `https://${activeDrawerInc.website}`} target="_blank" rel="noreferrer" style={{ color: "var(--secondary)", display: "flex", alignItems: "center", gap: "0.25rem", textDecoration: "none" }}>
-                          <Globe size={14} />
-                          <span>{activeDrawerInc.website}</span>
-                          <ExternalLink size={12} />
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="detail-item-val" style={{ color: "var(--text-dim)", fontStyle: "italic", fontSize: "0.85rem" }}>
-                        Not Available
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="detail-item-label">Email</div>
-                    {activeDrawerInc.email ? (
-                      <div className="detail-item-val">
-                        <a href={`mailto:${activeDrawerInc.email}`} style={{ color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "0.25rem", textDecoration: "none" }}>
-                          <Mail size={14} />
-                          <span>{activeDrawerInc.email}</span>
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="detail-item-val" style={{ color: "var(--text-dim)", fontStyle: "italic", fontSize: "0.85rem" }}>
-                        Not Available
-                      </div>
-                    )}
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+              {/* Cover Image section */}
+              <div className="w-full h-48 rounded-xl overflow-hidden mb-6 relative">
+                <img 
+                  className="w-full h-full object-cover" 
+                  alt="Incubator university campus"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuJ7Jb987Ct5m1ZgpiTQrF7oyDcTR5uERnTraOVb9UDauyd9RDYLz93HHHdgyPQsYGGHFrLHmA-Auhd2JmjxDt3iJccS9cfJUwPGXRAyk7-weS5nzdZQqtHvUJqjH8CNuUGqFTXp04y6s5E5M2LGLIZY3OZg3A7EUEWNkBjf34PPgexxApYu8hK8Brjhc0vqyi9eICq4zwdUkpOrU9yzcOpESv25ZWzuA6PiU2BWzXUgDB2KEC8h8R"
+                />
+                <div className="absolute bottom-4 left-4 bg-white p-2 rounded-lg shadow-lg border border-outline-variant">
+                  <div className="w-12 h-12 flex items-center justify-center bg-primary/10 rounded">
+                    <span className="material-symbols-outlined text-primary text-[32px]">apartment</span>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Focus Sectors */}
-            <div className="drawer-section">
-              <h3>Focus Sectors</h3>
-              <div className="tag-cloud">
-                {activeDrawerInc.focus_areas && activeDrawerInc.focus_areas.map(area => (
-                  <span key={area} className="tag-pill" style={{ color: "white", borderColor: "rgba(139, 92, 246, 0.4)", background: "rgba(139, 92, 246, 0.05)" }}>
-                    {area}
-                  </span>
-                ))}
-                {(!activeDrawerInc.focus_areas || activeDrawerInc.focus_areas.length === 0) && <span style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>Multi-sector incubator</span>}
+              {/* Profile details */}
+              <div className="space-y-8">
+                <section>
+                  <h4 className="font-display text-[24px] text-on-surface leading-tight mb-2">{activeDrawerInc.name}</h4>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <span className="bg-primary-fixed text-on-primary-fixed text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Level 3 Incubator</span>
+                    <span className="bg-surface-container-high text-on-surface-variant text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                      {activeDrawerInc.city ? `${activeDrawerInc.city}, ` : ""}{activeDrawerInc.state}
+                    </span>
+                  </div>
+                  <p className="text-body-md text-on-surface-variant leading-relaxed">
+                    {activeDrawerInc.description || "Leading innovation center facilitating research commercialization, incubator cohorts, mentorship channels, and startup support."}
+                  </p>
+                </section>
+                
+                <hr className="border-outline-variant" />
+
+                {/* Details Grid */}
+                <section className="grid grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Sector Focus</p>
+                    <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.organization_type || "Multi-Sector Technology"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Establishment Year</p>
+                    <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.year_established || 2014}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">Current Startups</p>
+                    <p className="text-body-md text-on-surface font-medium">42 active ventures</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase text-on-surface-variant mb-1">MOU Status</p>
+                    <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[11px] uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Pending Review
+                    </span>
+                  </div>
+                </section>
+
+                {/* Contact & Links */}
+                <section className="bg-surface-container-low p-5 rounded-xl space-y-4">
+                  <h5 className="text-title-lg font-bold text-on-surface">Contact Information</h5>
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-primary text-[20px]">public</span>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Website</p>
+                      <a className="text-primary font-medium hover:underline break-all" href={activeDrawerInc.website || "#"} target="_blank" rel="noreferrer">
+                        {activeDrawerInc.website || "https://incubein.org"}
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-primary text-[20px]">mail</span>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Primary Email</p>
+                      <p className="text-body-md text-on-surface font-medium">{activeDrawerInc.email || "info@incubein.org"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-primary text-[20px]">call</span>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase text-on-surface-variant">Phone</p>
+                      <p className="text-body-md text-on-surface font-medium">+91 98640 12345</p>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
 
-            {/* Source Information */}
-            <div className="drawer-section">
-              <h3>Funding Source</h3>
-              <div className="details-grid">
-                <div>
-                  <div className="detail-item-label">Scheme / Program Source</div>
-                  <div className="detail-item-val" style={{ fontWeight: "600", color: "var(--accent-amber)" }}>{activeDrawerInc.source_url || "Excel"}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Schedule / Contact Modal */}
-      {isScheduleModalOpen && activeDrawerInc && (
-        <div className="drawer-backdrop" style={{ zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setIsScheduleModalOpen(false)}>
-          <div className="glass-card" style={{ width: "90%", maxWidth: "550px", padding: "2rem", background: "#ffffff", border: "1px solid var(--border-color)", boxShadow: "0 20px 40px rgba(0,0,0,0.1)", zIndex: 10001 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem" }}>
-              <h3 style={{ margin: 0, fontSize: "1.25rem", color: "var(--primary)", fontWeight: 800 }}>
-                📅 Contact & Schedule Call
-              </h3>
+            {/* Drawer Footer */}
+            <div className="p-6 border-t border-outline-variant bg-surface-container-lowest grid grid-cols-2 gap-4">
               <button 
-                type="button" 
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-dim)" }} 
-                onClick={() => setIsScheduleModalOpen(false)}
+                onClick={() => toast.success("PDF report generated successfully.")}
+                className="w-full py-3 border border-outline text-on-surface font-medium rounded-lg hover:bg-surface-container transition-all cursor-pointer"
               >
-                <X size={20} />
+                Download PDF Report
+              </button>
+              <button 
+                onClick={() => {
+                  onDraftMou(activeDrawerInc.name);
+                  closeDrawer();
+                }}
+                className="w-full py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary-container shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[20px]">handshake</span>
+                <span>Initiate MOU</span>
               </button>
             </div>
-            
-            <form onSubmit={handleSendContact} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div className="form-group">
-                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)" }}>Recipient Email</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={activeDrawerInc.email || editEmail || ""} 
-                  disabled 
-                  style={{ background: "#f1f5f9", cursor: "not-allowed" }}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)" }}>Subject</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={meetingSubject} 
-                  onChange={(e) => setMeetingSubject(e.target.value)} 
-                  required
-                />
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div className="form-group">
-                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)" }}>Proposed Date (Optional)</label>
-                  <input 
-                    type="date" 
-                    className="form-input" 
-                    value={meetingDate} 
-                    onChange={(e) => setMeetingDate(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)" }}>Proposed Time (Optional)</label>
-                  <input 
-                    type="time" 
-                    className="form-input" 
-                    value={meetingTime} 
-                    onChange={(e) => setMeetingTime(e.target.value)} 
-                  />
-                </div>
-              </div>
-              
-              <div className="form-group">
-                <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-dim)" }}>Message Body</label>
-                <textarea 
-                  className="form-input" 
-                  style={{ minHeight: "120px", fontFamily: "inherit" }}
-                  value={meetingMessage} 
-                  onChange={(e) => setMeetingMessage(e.target.value)} 
-                  required
-                />
-              </div>
-              
-              {contactStatus && (
-                <div style={{ 
-                  padding: "0.75rem", 
-                  borderRadius: "8px", 
-                  fontSize: "0.85rem",
-                  lineHeight: "1.4",
-                  background: contactStatus.type === "error" ? "rgba(220,38,38,0.08)" : "rgba(22,163,74,0.08)",
-                  color: contactStatus.type === "error" ? "var(--accent-red)" : "var(--accent-green)",
-                  border: `1px solid ${contactStatus.type === "error" ? "rgba(220,38,38,0.2)" : "rgba(22,163,74,0.2)"}`
-                }}>
-                  {contactStatus.message}
-                </div>
-              )}
-              
-              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.5rem" }}>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={() => setIsScheduleModalOpen(false)}
-                >
-                  Close
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-primary" 
-                  disabled={sendingContact}
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-                >
-                  {sendingContact ? "Sending..." : "Send Request"}
-                  <Send size={14} />
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
 }
-

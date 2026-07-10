@@ -1,76 +1,43 @@
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
-import { 
-  Mail, 
-  MessageSquare, 
-  Brain, 
-  Calendar, 
-  Sparkles, 
-  Send, 
-  RefreshCcw, 
-  CheckCircle, 
-  Clock, 
-  TrendingUp, 
-  ArrowRight, 
-  Play, 
-  AlertCircle,
-  ExternalLink,
-  ChevronRight,
-  PenTool,
-  Trash2,
-  Upload,
-  Download
-} from "lucide-react";
 
-// Academic Collaboration Template
-const getAcademicMouText = (data) => `STRATEGIC INSTITUTIONAL COLLABORATION MOU
+// Academic Collaboration Template text generator
+const getAcademicMouText = (data) => `MEMORANDUM OF UNDERSTANDING
+FOR STRATEGIC COOPERATION AND ACADEMIC COLLABORATION
 
-This Memorandum of Understanding (hereinafter referred to as the "MoU") is entered into on this ${data.date} ("Effective Date"), by and between:
+This Memorandum of Understanding (MOU) is entered into this ${data.date || "October 24, 2023"} by and between:
 
-PARTY A:
-${data.incubatorName || "[Select Party A Incubator]"}
-Located at: ${data.incubatorCity || "City"}, ${data.incubatorState || "State"}, India
-Represented by: ${data.incubatorRep || "[Incubator Representative Name]"}
-(hereinafter referred to as the "First Party", which expression shall include its successors-in-interest and permitted assigns);
+THE FIRST PARTY:
+Incubator Hub, having its principal place of business at Global Innovation Center, Tech City (hereafter referred to as "The Service Provider").
 
 AND
 
-PARTY B:
-${data.partyBName || "[Partner Institution Name]"}
-Contact Email: ${data.partyBEmail || "[Contact Email]"}
-Represented by: ${data.partyBRep || "[Representative Name]"}
-(hereinafter referred to as the "Second Party", which expression shall include its successors-in-interest and permitted assigns).
+THE SECOND PARTY:
+${data.partyBName || "[NIT Silchar Innovation Hub]"}, located at ${data.location || "[Cachar, Assam]"} (hereafter referred to as "The Partner").
 
-WHEREAS:
-A. The First Party is an innovation hub and incubator committed to commercializing breakthrough scientific and technology startup models.
-B. The Second Party is a premier research/academic institution aiming to provide its students and faculty with avenues for incubation and commercial innovation.
-C. Both Parties intend to cooperate in co-developing research and innovation programs in the fields of: ${data.targetSectors || "Emerging Technologies"}.
+1. OBJECTIVE
+The primary objective of this partnership is to establish a framework for collaboration between The Service Provider and The Partner to foster a startup ecosystem, provide mentorship, and grant access to specialized capital resources for regional entrepreneurs.
 
-NOW, THEREFORE, THE PARTIES AGREE AS FOLLOWS:
+2. SCOPE OF COOPERATION
+The parties agree to cooperate in the following areas:
+- Joint organization of hackathons and incubation cohorts in the fields of: ${data.targetSectors || "DeepTech, AI/ML, SaaS"}.
+- Direct pipeline integration for Series A funding readiness.
+- Access to proprietary dashboard management tools provided by Incubator Hub.
+- Mutual recognition as "Strategic Innovation Partners" on all public communication.
 
-1. AREAS OF STRATEGIC COOPERATION
-1.1 Joint Projects: The Parties agree to co-develop joint research proposals, exchange scientific literature, and co-sponsor technical hackathons and incubator pitch days.
-1.2 Shared Resources: Subject to availability, both Parties will provide access to scientific research labs, testing equipment, and library resources to scholars and startups of either party.
-1.3 Incubation Pipeline: The Second Party will refer student entrepreneurs and faculty spin-offs to the First Party for commercial incubation support.
+3. CONFIDENTIALITY
+Both parties agree to maintain strict confidentiality regarding proprietary data, startup metrics, and strategic roadmaps shared during the term of this engagement.
 
-2. INTELLECTUAL PROPERTY & RESEARCH PUBLICATIONS
-2.1 Pre-existing IP: Intellectual property owned by either party prior to the Effective Date shall remain the sole property of that respective party.
-2.2 Collaborative IP: Any intellectual property generated jointly during the collaborative projects under this MoU shall be owned jointly. Sharing of patents and licensing terms will be negotiated separately.
-2.3 Publications: Co-authored scientific papers resulting from joint research may be published by mutual consent, acknowledging both institutions.
-
-3. FINANCIAL ARRANGEMENTS
-3.1 Project-Specific: This MoU does not constitute any direct financial commitment. Individual collaborative projects or research grants shall have separate financial agreements negotiated and signed by authorized officials.
-
-4. DURATION AND AMENDMENT
-4.1 Term: This MoU is valid for a period of ${data.duration || "3 Years"} and may be extended by mutual written agreement.
-4.2 Termination: Either Party may terminate this MoU with sixty (60) days prior written notice. Active projects or students currently undertaking internships shall not be affected by such termination.
-
-5. DISPUTE RESOLUTION
-5.1 Mediation: Any differences or disputes arising from the interpretation of this MoU shall be settled amicably through direct consultations between the heads of both institutions.
+4. DURATION
+This MOU is valid for a period of ${data.duration || "3 Years"} and may be extended by mutual written agreement.
 
 IN WITNESS WHEREOF, the Parties hereto have signed and executed this Memorandum of Understanding on the date and year first written above.`;
 
 export default function OutreachAutomation({ preselectedIncubatorName, refreshTrigger }) {
+  // Tab State
+  const [activeTab, setActiveTab] = useState("generator"); // "generator", "controls", "leads", "console"
+
+  // Lead and CRM state
   const [leads, setLeads] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [incubators, setIncubators] = useState([]);
@@ -78,545 +45,163 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
   const [checkingReplies, setCheckingReplies] = useState(false);
+  const [syncInterval, setSyncInterval] = useState(30);
+
+  // Lead search & filtering
+  const [leadSearchQuery, setLeadSearchQuery] = useState("");
+  const [leadSelectedStatus, setLeadSelectedStatus] = useState("");
+  const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
+  const leadsItemsPerPage = 10;
   
-  // Active workflow node (for flowchart animation highlight)
-  // 1: Send, 2: Reply, 3: AI intent, 4: Score, 5: Calendar
-  const [activeWorkflowNode, setActiveWorkflowNode] = useState(0);
-  
-  // Terminal logs state
+  // Console logs
   const [terminalLogs, setTerminalLogs] = useState([
     { time: new Date().toLocaleTimeString(), src: "SYSTEM", msg: "Outreach & auto-scheduling engine initialized." }
   ]);
-  
-  // Info detail modal
+
+  // Lead details sidebar inside the tab
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState(null);
+  const [leadNotesInput, setLeadNotesInput] = useState("");
+  
+  // OAuth configuration
+  const [oauthConfigured, setOauthConfigured] = useState(true);
+  const [oauthAuthorized, setOauthAuthorized] = useState(true);
 
-  // MOU Form states
-  const [showMouForm, setShowMouForm] = useState(false);
-  const [selectedIncId, setSelectedIncId] = useState("");
-  const [partyBName, setPartyBName] = useState("");
-  const [partyBEmail, setPartyBEmail] = useState("");
-  const [partyBRep, setPartyBRep] = useState("");
-  const [mouDate, setMouDate] = useState(new Date().toISOString().split("T")[0]);
-  const [duration, setDuration] = useState("3 Years");
-  const [targetSectors, setTargetSectors] = useState("DeepTech, AI/ML, SaaS");
-  const [incubatorRep, setIncubatorRep] = useState("Director, InCubein Foundation");
-  const [signatureData, setSignatureData] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [sendingMou, setSendingMou] = useState(false);
-  const [mouSendStatus, setMouSendStatus] = useState(null);
-
-  // Incubator Search & Filter states
-  const [incSearchQuery, setIncSearchQuery] = useState("");
-  const [incSelectedRegion, setIncSelectedRegion] = useState("");
-  const [incSelectedState, setIncSelectedState] = useState("");
-  const [incSelectedCity, setIncSelectedCity] = useState("");
-  const [incSelectedSector, setIncSelectedSector] = useState("");
-
-  // Directory Lead Finder states (with 5 items per page)
-  const [dirSearchQuery, setDirSearchQuery] = useState("");
-  const [dirSelectedState, setDirSelectedState] = useState("");
-  const [dirSelectedRegion, setDirSelectedRegion] = useState("");
-  const [dirSelectedSector, setDirSelectedSector] = useState("");
-  const [dirMinStars, setDirMinStars] = useState(0);
-  const [dirCurrentPage, setDirCurrentPage] = useState(1);
-  const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
-  const [addingLeadId, setAddingLeadId] = useState(null);
-
-  // Sync Interval state
-  const [syncInterval, setSyncInterval] = useState(30);
-
-  // OAuth states
-  const [oauthConfigured, setOauthConfigured] = useState(false);
-  const [oauthAuthorized, setOauthAuthorized] = useState(false);
-
-  // Meeting scheduling states
+  // Meeting scheduler states
   const [selectedLeadForMeeting, setSelectedLeadForMeeting] = useState(null);
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("11:00 AM");
   const [schedulingMeeting, setSchedulingMeeting] = useState(false);
 
-  // Campaign leads filter states
-  const [leadSearchQuery, setLeadSearchQuery] = useState("");
-  const [leadSelectedStatus, setLeadSelectedStatus] = useState("");
-  const [leadNotesInput, setLeadNotesInput] = useState("");
+  // Stepped Form states (Stitch design Screen 3)
+  const [selectedIncName, setSelectedIncName] = useState("NIT Silchar Innovation Hub");
+  const [selectedLocation, setSelectedLocation] = useState("Assam, India");
+  const [recipientEmail, setRecipientEmail] = useState("partnerships@nits.ac.in");
+  const [emailSubject, setEmailSubject] = useState("Partnership MOU: Incubator Hub x NIT Silchar");
+  const [focusAreas, setFocusAreas] = useState("DeepTech, AI/ML, SaaS");
+  const [duration, setDuration] = useState("3 Years");
+  const [executionDate, setExecutionDate] = useState("2023-10-24");
+  const [trackEmails, setTrackEmails] = useState(true);
 
-  // Unique filter lists extracted dynamically
-  const regionsList = ["North", "South", "East", "West", "Central", "Northeast"];
-  const statesList = Array.from(new Set(incubators.map(i => i.state).filter(Boolean))).sort();
-  const citiesList = Array.from(new Set(incubators.map(i => i.city).filter(Boolean))).sort();
-  
-  // Parse comma-separated focus areas to build unique sector list
-  const sectorsList = Array.from(new Set(
-    incubators.flatMap(i => {
-      if (!i.focus_areas) return [];
-      if (Array.isArray(i.focus_areas)) return i.focus_areas;
-      if (typeof i.focus_areas === "string") return i.focus_areas.split(",").map(s => s.trim());
-      return [];
-    }).filter(Boolean)
-  )).sort();
-
-  // Helper to convert confidence score (0.0 to 1.0) to star rating (1 to 5)
-  const getStarsCount = (score) => {
-    return Math.max(1, Math.min(5, Math.ceil((score || 1.0) * 5)));
-  };
-
-  // Filtered Incubators List
-  const filteredIncubators = incubators.filter(inc => {
-    if (incSearchQuery && 
-        !inc.name.toLowerCase().includes(incSearchQuery.toLowerCase()) && 
-        !(inc.description || "").toLowerCase().includes(incSearchQuery.toLowerCase())) {
-      return false;
-    }
-    if (incSelectedRegion && inc.region !== incSelectedRegion) {
-      return false;
-    }
-    if (incSelectedState && inc.state !== incSelectedState) {
-      return false;
-    }
-    if (incSelectedCity && inc.city !== incSelectedCity) {
-      return false;
-    }
-    if (incSelectedSector) {
-      const sectors = Array.isArray(inc.focus_areas)
-        ? inc.focus_areas
-        : (typeof inc.focus_areas === "string" ? inc.focus_areas.split(",").map(s => s.trim()) : []);
-      if (!sectors.some(s => s.toLowerCase().includes(incSelectedSector.toLowerCase()))) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  // Filtered Directory Incubators List for Campaign Lead Finder
-  const filteredDirIncubators = incubators.filter(inc => {
-    if (dirSearchQuery && 
-        !inc.name.toLowerCase().includes(dirSearchQuery.toLowerCase()) && 
-        !(inc.description || "").toLowerCase().includes(dirSearchQuery.toLowerCase())) {
-      return false;
-    }
-    if (dirSelectedRegion && inc.region !== dirSelectedRegion) {
-      return false;
-    }
-    if (dirSelectedState && inc.state !== dirSelectedState) {
-      return false;
-    }
-    if (dirSelectedSector) {
-      const sectors = Array.isArray(inc.focus_areas)
-        ? inc.focus_areas
-        : (typeof inc.focus_areas === "string" ? inc.focus_areas.split(",").map(s => s.trim()) : []);
-      if (!sectors.some(s => s.toLowerCase().includes(dirSelectedSector.toLowerCase()))) {
-        return false;
-      }
-    }
-    if (dirMinStars > 0 && getStarsCount(inc.confidence_score) < dirMinStars) {
-      return false;
-    }
-    return true;
-  });
-
-  // Pagination calculations for Directory Incubators
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(filteredDirIncubators.length / itemsPerPage) || 1;
-  const paginatedDirIncubators = filteredDirIncubators.slice(
-    (dirCurrentPage - 1) * itemsPerPage,
-    dirCurrentPage * itemsPerPage
-  );
-
-  // Reset page to 1 when filters change
-  useEffect(() => {
-    setDirCurrentPage(1);
-  }, [dirSearchQuery, dirSelectedState, dirSelectedRegion, dirSelectedSector, dirMinStars]);
-
-  // Filter campaign leads
-  const filteredLeads = leads.filter(lead => {
-    if (leadSearchQuery && 
-        !lead.incubator_name.toLowerCase().includes(leadSearchQuery.toLowerCase()) && 
-        !lead.email.toLowerCase().includes(leadSearchQuery.toLowerCase())) {
-      return false;
-    }
-    if (leadSelectedStatus && lead.status !== leadSelectedStatus) {
-      return false;
-    }
-    return true;
-  });
-
-  // Reset page to 1 when filters change
-  useEffect(() => {
-    setLeadsCurrentPage(1);
-  }, [leadSearchQuery, leadSelectedStatus]);
-
-  // Pagination calculations for Targeted Campaigns (5 per page)
-  const leadsItemsPerPage = 5;
-  const totalLeadsPages = Math.ceil(filteredLeads.length / leadsItemsPerPage) || 1;
-  const paginatedLeads = filteredLeads.slice(
-    (leadsCurrentPage - 1) * leadsItemsPerPage,
-    leadsCurrentPage * leadsItemsPerPage
-  );
-
-  // Sync details modal notes input
-  useEffect(() => {
-    if (selectedLeadForDetail) {
-      setLeadNotesInput(selectedLeadForDetail.notes || "");
-    } else {
-      setLeadNotesInput("");
-    }
-  }, [selectedLeadForDetail]);
-
-  // Signature drawing canvas ref
+  // Drawing signature pad ref & drawing state
   const canvasRef = useRef(null);
-  // Terminal scroll reference
-  const terminalEndRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureSaved, setSignatureSaved] = useState(false);
 
-  const addLog = (src, msg) => {
-    setTerminalLogs(prev => [
-      ...prev,
-      { time: new Date().toLocaleTimeString(), src, msg }
-    ]);
-  };
-
-  useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [terminalLogs]);
-
-  // Fetch campaign data
-  const fetchData = async () => {
-    setLoading(true);
+  // Fetch all leads, meetings, events
+  const fetchLeads = async () => {
     try {
-      const leadsRes = await fetch("http://127.0.0.1:8000/api/outreach/leads");
-      const leadsData = await leadsRes.json();
-      setLeads(leadsData);
-      
-      const meetingsRes = await fetch("http://127.0.0.1:8000/api/outreach/meetings");
-      const meetingsData = await meetingsRes.json();
-      setMeetings(meetingsData);
-
-      const incsRes = await fetch("http://127.0.0.1:8000/api/incubators?limit=10000");
-      const incsData = await incsRes.json();
-      setIncubators(incsData);
-
-      // Fetch external events using the Google Calendar API key
-      try {
-        const calendarRes = await fetch("http://127.0.0.1:8000/api/outreach/calendar-events");
-        const calendarData = await calendarRes.json();
-        setExternalEvents(calendarData.events || []);
-      } catch (calErr) {
-        console.error("Error fetching calendar events:", calErr);
-      }
-
-      // Fetch auto-scan interval config
-      try {
-        const configRes = await fetch("http://127.0.0.1:8000/api/outreach/config");
-        const configData = await configRes.json();
-        if (configData && typeof configData.sync_interval === "number") {
-          setSyncInterval(configData.sync_interval);
-        }
-      } catch (configErr) {
-        console.error("Error fetching sync config:", configErr);
-      }
-
-      // Fetch OAuth configuration & authorization status
-      try {
-        const oauthRes = await fetch("http://127.0.0.1:8000/api/outreach/oauth-status");
-        const oauthData = await oauthRes.json();
-        if (oauthData) {
-          setOauthConfigured(oauthData.is_configured);
-          setOauthAuthorized(oauthData.is_authorized);
-        }
-      } catch (oauthErr) {
-        console.error("Error fetching OAuth status:", oauthErr);
+      const res = await fetch("http://127.0.0.1:8000/api/outreach/leads");
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data);
       }
     } catch (e) {
       console.error(e);
-      addLog("ERROR", "Failed to connect to the backend API.");
-    } finally {
+    }
+  };
+
+  const fetchMeetingsAndEvents = async () => {
+    try {
+      const meetingsRes = await fetch("http://127.0.0.1:8000/api/outreach/meetings");
+      if (meetingsRes.ok) {
+        const data = await meetingsRes.json();
+        setMeetings(data);
+      }
+
+      const eventsRes = await fetch("http://127.0.0.1:8000/api/outreach/calendar-events");
+      if (eventsRes.ok) {
+        const data = await eventsRes.json();
+        setExternalEvents(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchIncubators = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/incubators?limit=10000");
+      if (res.ok) {
+        const data = await res.json();
+        setIncubators(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/outreach/config");
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInterval(data.sync_interval || 30);
+      }
+
+      const oauthRes = await fetch("http://127.0.0.1:8000/api/outreach/oauth-status");
+      if (oauthRes.ok) {
+        const data = await oauthRes.json();
+        setOauthConfigured(data.configured);
+        setOauthAuthorized(data.authorized);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([fetchLeads(), fetchMeetingsAndEvents(), fetchIncubators(), fetchConfig()]);
       setLoading(false);
-    }
-  };
-
-  const handleIntervalChange = async (newVal) => {
-    setSyncInterval(newVal);
-    addLog("SYSTEM", `Changing auto scan interval to ${newVal === 0 ? "Disabled (Manual Check Only)" : `${newVal} seconds`}...`);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sync_interval: newVal })
-      });
-      if (res.ok) {
-        addLog("SYSTEM", `Auto scan interval successfully updated to ${newVal === 0 ? "Disabled" : `${newVal} seconds`}.`);
-      } else {
-        addLog("ERROR", "Failed to persist scan interval setting on backend.");
-      }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend configuration API.");
-    }
-  };
-
-  const handleAddLead = async (inc) => {
-    setAddingLeadId(inc.id);
-    const leadEmail = inc.email || `contact@${inc.name.toLowerCase().replace(/[^a-z0-9]/g, "")}.org`;
-    addLog("OUTREACH", `Adding ${inc.name} (${leadEmail}) to outreach campaign...`);
-    
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/add-lead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          incubator_id: inc.id,
-          incubator_name: inc.name,
-          email: leadEmail
-        })
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        if (data.status === "exists") {
-          addLog("SYSTEM", `${inc.name} is already a lead in this campaign.`);
-          toast.warning(`${inc.name} is already a lead in this campaign.`);
-        } else {
-          addLog("OUTREACH", `Successfully added ${inc.name} to campaigns as Draft.`);
-          await fetchData();
-        }
-      } else {
-        addLog("ERROR", `Failed to add lead: ${data.detail || "Server error"}`);
-      }
-    } catch (err) {
-      addLog("ERROR", "Connection to backend add-lead API failed.");
-    } finally {
-      setAddingLeadId(null);
-    }
-  };
-
-  const handleAuthorizeCalendar = async () => {
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/authorize");
-      const data = await res.json();
-      if (res.ok && data.authorization_url) {
-        window.open(data.authorization_url, "_blank");
-      } else {
-        toast.error(data.detail || "Failed to generate authorization URL.");
-      }
-    } catch (err) {
-      toast.error("Failed to connect to backend authorization service.");
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  // Handle refresh trigger from global app refresh button (triggers check replies)
-  useEffect(() => {
-    if (refreshTrigger > 0) {
-      handleCheckReplies();
-    }
+    };
+    init();
   }, [refreshTrigger]);
 
-  // Frontend silent polling based on syncInterval setting
+  // Handle incubator select change
   useEffect(() => {
-    if (syncInterval > 0) {
-      const intervalId = setInterval(async () => {
-        try {
-          const leadsRes = await fetch("http://127.0.0.1:8000/api/outreach/leads");
-          if (leadsRes.ok) {
-            const leadsData = await leadsRes.json();
-            setLeads(leadsData);
-          }
-          const meetingsRes = await fetch("http://127.0.0.1:8000/api/outreach/meetings");
-          if (meetingsRes.ok) {
-            const meetingsData = await meetingsRes.json();
-            setMeetings(meetingsData);
-          }
-        } catch (e) {
-          console.error("Silent polling sync failed", e);
-        }
-      }, syncInterval * 1000);
-      return () => clearInterval(intervalId);
-    }
-  }, [syncInterval]);
+    if (incubators.length > 0) {
+      let matched = null;
+      if (preselectedIncubatorName) {
+        matched = incubators.find(inc =>
+          inc.name.toLowerCase().includes(preselectedIncubatorName.toLowerCase())
+        );
+      } else {
+        matched = incubators.find(inc => inc.name.includes("Silchar") || inc.name.includes("NIT"));
+      }
 
-  // Preselect incubator if routed from Finder
-  useEffect(() => {
-    if (incubators.length > 0 && preselectedIncubatorName) {
-      const matched = incubators.find(inc => 
-        inc.name.toLowerCase().includes(preselectedIncubatorName.toLowerCase())
-      );
       if (matched) {
-        setSelectedIncId(matched.id);
-        setShowMouForm(true);
-        addLog("SYSTEM", `Preselected incubator from directory: ${matched.name}`);
+        setSelectedIncName(matched.name);
+        setSelectedLocation(`${matched.city ? matched.city + ", " : ""}${matched.state}`);
+        setRecipientEmail(matched.email || "partnerships@nits.ac.in");
+        setEmailSubject(`Partnership MOU: Incubator Hub x ${matched.name}`);
+        setFocusAreas(matched.organization_type || "DeepTech, AI/ML, SaaS");
       }
     }
   }, [incubators, preselectedIncubatorName]);
 
-  // Set representative when incubator selection changes
-  useEffect(() => {
-    if (selectedIncId && incubators.length > 0) {
-      const inc = incubators.find(i => i.id === selectedIncId);
-      if (inc) {
-        setIncubatorRep(inc.founder_or_head || "Director");
-      }
-    }
-  }, [selectedIncId, incubators]);
-
-  const handleReset = async () => {
-    setResetting(true);
-    setActiveWorkflowNode(0);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/reset", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        addLog("SYSTEM", "Campaign simulation data successfully reset.");
-        await fetchData();
-      } else {
-        addLog("ERROR", `Reset failed: ${data.detail || "Server error"}`);
-      }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend reset route.");
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  const handleUpdateMeetingStatus = async (meetingId, newStatus) => {
-    addLog("CALENDAR", `Updating meeting status to '${newStatus}' for meeting ID: ${meetingId}...`);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/meetings/update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_id: meetingId, status: newStatus })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        addLog("CALENDAR", `Meeting status successfully updated to '${newStatus}'!`);
-        await fetchData();
-      } else {
-        addLog("ERROR", `Failed to update meeting status: ${data.detail || "Server error"}`);
-      }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend meetings status API.");
-    }
-  };
-  
-  const handleDeleteMeeting = async (meetingId) => {
-    if (!window.confirm("Are you sure you want to remove this meeting and cancel its Google Calendar event?")) {
-      return;
-    }
-    addLog("CALENDAR", `Removing meeting ID: ${meetingId}...`);
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/outreach/meetings/${meetingId}`, {
-        method: "DELETE"
-      });
-      const data = await res.json();
-      if (res.ok) {
-        addLog("CALENDAR", `Meeting successfully removed!`);
-        toast.success("Meeting removed from sync.");
-        await fetchData();
-      } else {
-        addLog("ERROR", `Failed to delete meeting: ${data.detail || "Server error"}`);
-      }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend delete meeting API.");
-    }
-  };
-
-  const handleUpdateLeadStatus = async (leadId, newStatus) => {
-    addLog("SYSTEM", `Updating campaign lead status to '${newStatus}'...`);
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/leads/update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId, status: newStatus })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        addLog("SYSTEM", `Campaign lead status updated to '${newStatus}'.`);
-        await fetchData();
-        if (selectedLeadForDetail && selectedLeadForDetail.id === leadId) {
-          setSelectedLeadForDetail(prev => ({ ...prev, status: newStatus }));
-        }
-      } else {
-        addLog("ERROR", `Failed to update status: ${data.detail || "Server error"}`);
-      }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend update-status API.");
-    }
-  };
-
-  const handleUpdateLeadNotes = async (leadId, notesText) => {
-    addLog("SYSTEM", `Saving CRM notes for campaign lead...`);
+  // Lead update notes
+  const handleUpdateNotes = async (leadId) => {
     try {
       const res = await fetch("http://127.0.0.1:8000/api/outreach/leads/update-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId, notes: notesText })
+        body: JSON.stringify({ lead_id: leadId, notes: leadNotesInput })
       });
-      const data = await res.json();
       if (res.ok) {
-        addLog("SYSTEM", `CRM notes saved successfully.`);
-        await fetchData();
-        if (selectedLeadForDetail && selectedLeadForDetail.id === leadId) {
-          setSelectedLeadForDetail(prev => ({ ...prev, notes: notesText }));
-        }
-        toast.success("Notes saved successfully!");
-      } else {
-        addLog("ERROR", `Failed to save notes: ${data.detail || "Server error"}`);
+        toast.success("Notes saved.");
+        fetchLeads();
       }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend update-notes API.");
+    } catch (e) {
+      toast.error("Failed to save notes.");
     }
   };
 
-  const handleExportLeadsToCsv = () => {
-    addLog("SYSTEM", "Compiling campaign leads dataset to CSV...");
-    if (leads.length === 0) {
-      toast.warning("No leads available to export.");
-      return;
-    }
-    
-    const headers = ["ID", "Incubator ID", "Incubator Name", "Email", "Status", "Sent At", "Lead Score", "Intent", "Meeting Link", "Meeting Scheduled At", "Notes"];
-    const csvRows = [headers.join(",")];
-    
-    leads.forEach(lead => {
-      const values = [
-        lead.id,
-        lead.incubator_id || "",
-        `"${(lead.incubator_name || "").replace(/"/g, '""')}"`,
-        lead.email || "",
-        lead.status || "",
-        lead.sent_at || "",
-        lead.lead_score || 0,
-        lead.intent_classification || "N/A",
-        lead.meeting_link || "",
-        lead.meeting_scheduled_at || "",
-        `"${(lead.notes || "").replace(/"/g, '""')}"`
-      ];
-      csvRows.push(values.join(","));
-    });
-    
-    const csvString = csvRows.join("\n");
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `outreach_campaign_leads_${new Date().toISOString().split("T")[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    addLog("SYSTEM", "Campaign CSV export downloaded successfully.");
-  };
-
-  const handleScheduleMeetingSubmit = async (e) => {
+  // Schedule meeting
+  const handleScheduleMeeting = async (e) => {
     e.preventDefault();
     if (!selectedLeadForMeeting) return;
-    
     setSchedulingMeeting(true);
-    addLog("CALENDAR", `Requesting Google Calendar Meet scheduling for ${selectedLeadForMeeting.incubator_name} on ${meetingDate} at ${meetingTime}...`);
-    
     try {
       const res = await fetch("http://127.0.0.1:8000/api/outreach/schedule-meeting", {
         method: "POST",
@@ -627,1096 +212,691 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
           time: meetingTime
         })
       });
-      
-      const data = await res.json();
       if (res.ok) {
-        addLog("CALENDAR", `Meeting successfully scheduled! Meet Link: ${data.meeting_link}`);
-        toast.success(`Meeting successfully scheduled! Email invite sent to ${selectedLeadForMeeting.email}.`);
+        toast.success("Meeting scheduled on Google Calendar.");
         setSelectedLeadForMeeting(null);
-        await fetchData();
+        fetchMeetingsAndEvents();
+        fetchLeads();
       } else {
-        addLog("ERROR", `Failed to schedule meeting: ${data.detail || "Server error"}`);
-        toast.error(`Error: ${data.detail || "Failed to schedule meeting"}`);
+        toast.error("Failed to schedule meeting.");
       }
-    } catch (err) {
-      addLog("ERROR", "Failed to connect to backend schedule-meeting API.");
-      toast.error("Failed to connect to backend schedule-meeting API.");
+    } catch (e) {
+      toast.error("Network error scheduling meeting.");
     } finally {
       setSchedulingMeeting(false);
     }
   };
 
-  const handleSendEmail = async (leadId, leadName, leadEmail) => {
-    addLog("OUTREACH", `Triggering outreach partnership invitation email to ${leadName} (${leadEmail})...`);
-    setActiveWorkflowNode(1);
-    
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/outreach/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId })
-      });
-      const data = await res.json();
-      
-      if (res.ok) {
-        addLog("OUTREACH", `Outreach successfully dispatched. Status: SENT.`);
-        await fetchData();
-        setTimeout(() => setActiveWorkflowNode(0), 1000);
-      } else {
-        addLog("ERROR", `Failed to send outreach: ${data.detail || "Server error"}`);
-        setActiveWorkflowNode(0);
-      }
-    } catch (err) {
-      addLog("ERROR", "Connection to backend campaign API failed.");
-      setActiveWorkflowNode(0);
-    }
-  };
-
+  // Check replies
   const handleCheckReplies = async () => {
     setCheckingReplies(true);
-    addLog("SYSTEM", "Connecting to IMAP inbox to scan for unread responses...");
-    
+    addLog("OUTREACH", "Scanning connected inbox for reply emails...");
     try {
       const res = await fetch("http://127.0.0.1:8000/api/outreach/check-replies", { method: "POST" });
-      const data = await res.json();
-      
       if (res.ok) {
-        const newReplies = data.new_replies || [];
-        if (newReplies.length > 0) {
-          addLog("SYSTEM", `IMAP Scan complete. Processed ${newReplies.length} new reply/replies.`);
-          newReplies.forEach(reply => {
-            addLog("INBOX", `Reply matched from ${reply.incubator_name} (${reply.email}): "${reply.reply_text.substring(0, 60)}..."`);
-            addLog("AI_ENGINE", `Gemini Classification: Intent=${reply.intent.toUpperCase()}, Interest Score=${reply.score}/100`);
-            if (reply.status === "Meeting Scheduled") {
-              addLog("CALENDAR", `Score > 80. Google Calendar Meeting synchronized with Google Meet link.`);
-            } else {
-              addLog("SYSTEM", `Score (${reply.score}) below threshold. Reply recorded.`);
-            }
-          });
-        } else {
-          addLog("SYSTEM", "IMAP Scan complete. No new unread replies from campaign leads detected.");
-        }
-        await fetchData();
-      } else {
-        addLog("ERROR", `Scan failed: ${data.detail || "Server error"}`);
+        const data = await res.json();
+        toast.success(data.message);
+        addLog("OUTREACH", `Inbox scan complete: ${data.message}`);
+        fetchLeads();
       }
-    } catch (err) {
-      addLog("ERROR", "IMAP mailbox retrieval connection error.");
+    } catch (e) {
+      toast.error("Failed to check replies.");
     } finally {
       setCheckingReplies(false);
     }
   };
 
-  // Signature drawing handlers
-  const startDrawing = (e) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#1e3a8a";
-    
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
-    
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-  };
-
-  const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
-    
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setSignatureData(null);
-  };
-
-  const adoptSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    // Check if canvas is empty
-    const context = canvas.getContext("2d");
-    const buffer = new Uint32Array(
-      context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-    );
-    const isEmpty = !buffer.some(color => color !== 0);
-    
-    if (isEmpty) {
-      toast.warning("Please draw your signature first.");
-      return;
-    }
-    
-    const dataUrl = canvas.toDataURL("image/png");
-    setSignatureData(dataUrl);
-    addLog("SYSTEM", "Digital signature adopted successfully.");
-  };
-
-  const handleSignatureUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.warning("Please upload a valid image file.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const hRatio = canvas.width / img.width;
-        const vRatio = canvas.height / img.height;
-        const ratio = Math.min(hRatio, vRatio, 1);
-        
-        const centerShift_x = (canvas.width - img.width * ratio) / 2;
-        const centerShift_y = (canvas.height - img.height * ratio) / 2;
-        
-        ctx.drawImage(
-          img,
-          0, 0, img.width, img.height,
-          centerShift_x, centerShift_y, img.width * ratio, img.height * ratio
-        );
-        
-        const dataUrl = canvas.toDataURL("image/png");
-        setSignatureData(dataUrl);
-        addLog("SYSTEM", "Uploaded signature image adopted.");
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSendMou = async (e) => {
-    e.preventDefault();
-    if (!selectedIncId) {
-      toast.warning("Please select First Party Incubator.");
-      return;
-    }
-    if (!signatureData) {
-      toast.warning("Please draw or upload and adopt your digital signature first.");
-      return;
-    }
-
-    const selectedInc = incubators.find(i => i.id === selectedIncId);
-    const incName = selectedInc ? selectedInc.name : "";
-    const incCity = selectedInc ? selectedInc.city : "";
-    const incState = selectedInc ? selectedInc.state : "";
-    const incEmail = selectedInc ? selectedInc.email : "contact@incubator.org";
-
-    setSendingMou(true);
-    setMouSendStatus(null);
-    addLog("OUTREACH", `Transmitting executed Academic Collaboration MOU agreement to ${partyBName} (${partyBEmail})...`);
-
+  // Reset CRM
+  const handleReset = async () => {
+    if (!window.confirm("Are you sure you want to reset all campaign leads?")) return;
+    setResetting(true);
+    addLog("SYSTEM", "Resetting all outreach campaign pipelines...");
     try {
-      const templateData = {
-        date: mouDate,
-        incubatorName: incName,
-        incubatorCity: incCity,
-        incubatorState: incState,
-        incubatorRep,
-        partyBName,
-        partyBEmail,
-        partyBRep,
-        duration,
-        targetSectors
-      };
+      const res = await fetch("http://127.0.0.1:8000/api/outreach/reset", { method: "POST" });
+      if (res.ok) {
+        toast.success("Outreach campaigns reset.");
+        addLog("SYSTEM", "Pipeline database table cleared.");
+        fetchLeads();
+        fetchMeetingsAndEvents();
+      }
+    } catch (e) {
+      toast.error("Reset failed.");
+    } finally {
+      setResetting(false);
+    }
+  };
 
+  // Google Calendar Auth
+  const handleAuthorizeCalendar = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/outreach/authorize");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          window.open(data.url, "_blank");
+        }
+      }
+    } catch (e) {
+      toast.error("Failed to initiate OAuth.");
+    }
+  };
+
+  // Send MOU
+  const handleSendMou = async () => {
+    setLoading(true);
+    addLog("OUTREACH", `Sending MOU document email to ${recipientEmail}...`);
+    try {
       const res = await fetch("http://127.0.0.1:8000/api/mou/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          incubator_name: incName,
-          incubator_email: incEmail,
-          party_b_name: partyBName,
-          party_b_email: partyBEmail,
-          mou_title: "MEMORANDUM OF UNDERSTANDING FOR STRATEGIC COOPERATION AND ACADEMIC COLLABORATION",
-          mou_text: getAcademicMouText(templateData),
-          signature_data: signatureData,
-          recipient_email: partyBEmail
+          incubator_name: selectedIncName,
+          incubator_email: recipientEmail,
+          party_b_name: selectedIncName,
+          party_b_email: recipientEmail,
+          mou_title: "Memorandum of Understanding",
+          mou_text: getAcademicMouText({
+            date: executionDate,
+            incubatorName: selectedIncName,
+            location: selectedLocation,
+            partyBName: selectedIncName,
+            partyBEmail: recipientEmail,
+            duration: duration,
+            targetSectors: focusAreas
+          })
         })
       });
 
-      const data = await res.json();
       if (res.ok) {
-        addLog("OUTREACH", `MOU agreement dispatched successfully to ${partyBEmail}. (Registered as active Sent campaign lead).`);
-        setMouSendStatus({ type: "success", message: `Academic Collaboration MOU successfully sent to ${partyBEmail}!` });
-        
-        // Reset states
-        setTimeout(() => {
-          setShowMouForm(false);
-          setPartyBName("");
-          setPartyBEmail("");
-          setPartyBRep("");
-          setSignatureData(null);
-          setMouSendStatus(null);
-        }, 3000);
-
-        await fetchData();
+        toast.success("MOU email generated and transmitted successfully!");
+        addLog("OUTREACH", `SUCCESS: MOU sent to ${selectedIncName} (${recipientEmail})`);
+        // Add as a lead if not already
+        const matchedInc = incubators.find(i => i.name === selectedIncName);
+        if (matchedInc) {
+          await fetch("http://127.0.0.1:8000/api/outreach/add-lead", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              incubator_id: matchedInc.id,
+              incubator_name: matchedInc.name,
+              email: recipientEmail
+            })
+          });
+        }
+        fetchLeads();
       } else {
-        setMouSendStatus({ type: "error", message: data.detail || "Failed to send agreement." });
-        addLog("ERROR", `Failed to dispatch MOU: ${data.detail || "Server error"}`);
+        toast.error("Failed to send MOU.");
       }
-    } catch (err) {
-      console.error(err);
-      setMouSendStatus({ type: "error", message: "Network connection error." });
-      addLog("ERROR", "SMTP transmission connection failed.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Network error sending MOU.");
     } finally {
-      setSendingMou(false);
+      setLoading(false);
     }
   };
 
-  // Metrics
-  const totalSent = leads.filter(l => l.status !== "Draft").length;
-  const totalReplies = leads.filter(l => ["Replied", "Meeting Scheduled", "Not Interested"].includes(l.status)).length;
-  const totalMeetings = meetings.length;
+  // Sync Interval Change
+  const handleSyncIntervalChange = async (newVal) => {
+    setSyncInterval(newVal);
+    try {
+      await fetch("http://127.0.0.1:8000/api/outreach/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sync_interval: newVal })
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Add Terminal Log Helper
+  const addLog = (src, msg) => {
+    setTerminalLogs(prev => [
+      { time: new Date().toLocaleTimeString(), src, msg },
+      ...prev.slice(0, 49)
+    ]);
+  };
+
+  // Filtered Leads
+  const filteredLeads = leads.filter(lead => {
+    const matchesSearch = 
+      lead.incubator_name.toLowerCase().includes(leadSearchQuery.toLowerCase()) ||
+      lead.email.toLowerCase().includes(leadSearchQuery.toLowerCase());
+    const matchesStatus = leadSelectedStatus ? lead.status === leadSelectedStatus : true;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Pagination Math
+  const totalLeadsPages = Math.ceil(filteredLeads.length / leadsItemsPerPage) || 1;
+  const currentLeads = filteredLeads.slice(
+    (leadsCurrentPage - 1) * leadsItemsPerPage,
+    leadsCurrentPage * leadsItemsPerPage
+  );
+
+  // Digital Signature Canvas Operations
+  const startDrawing = ({ nativeEvent }) => {
+    const { offsetX, offsetY } = nativeEvent;
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.beginPath();
+    ctx.moveTo(offsetX, offsetY);
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#004ac6";
+    setIsDrawing(true);
+  };
+
+  const draw = ({ nativeEvent }) => {
+    if (!isDrawing) return;
+    const { offsetX, offsetY } = nativeEvent;
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.lineTo(offsetX, offsetY);
+    ctx.stroke();
+  };
+
+  const stopDrawingSignature = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureSaved(false);
+  };
+
+  const adoptSignature = () => {
+    setSignatureSaved(true);
+    toast.success("Digital signature adopted successfully!");
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      
-      {/* Campaign Controls Card */}
-      <div className="glass-card" style={{ padding: "1.5rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700" }}>
-              ⚡ Email Outreach Campaign Management
-            </h3>
-            <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-dim)" }}>
-              Coordinate email outreach invites, check live inbox replies, and monitor automated follow-up calendar schedules.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "#000000", whiteSpace: "nowrap", fontWeight: "600" }}>Auto Scan:</span>
-              <select 
-                className="form-input" 
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", width: "130px", height: "32px", color: "black", background: "#f8fafc", border: "1px solid var(--border-color)", borderRadius: "4px", margin: 0 }}
-                value={syncInterval}
-                onChange={(e) => handleIntervalChange(parseInt(e.target.value))}
-              >
-                <option value={30}>Every 30 sec</option>
-                <option value={60}>Every 1 min</option>
-                <option value={300}>Every 5 min</option>
-                <option value={600}>Every 10 min</option>
-                <option value={0}>Disabled (Manual)</option>
-              </select>
-            </div>
-
-            {oauthAuthorized ? (
-              <div 
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: "0.35rem", 
-                  padding: "0.4rem 0.75rem", 
-                  fontSize: "0.8rem", 
-                  height: "32px", 
-                  background: "#d4edda", 
-                  border: "1px solid #c3e6cb", 
-                  borderRadius: "4px", 
-                  color: "#000000", 
-                  fontWeight: "600" 
-                }}
-              >
-                <CheckCircle size={14} style={{ color: "#155724" }} />
-                <span>✓ Google Calendar Active</span>
-              </div>
-            ) : oauthConfigured ? (
-              <button 
-                className="btn"
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: "0.35rem", 
-                  padding: "0.4rem 0.75rem", 
-                  fontSize: "0.8rem", 
-                  height: "32px", 
-                  background: "#fff3cd", 
-                  border: "1px solid #ffeeba", 
-                  color: "#000000", 
-                  fontWeight: "600", 
-                  cursor: "pointer", 
-                  borderRadius: "4px" 
-                }}
-                onClick={handleAuthorizeCalendar}
-              >
-                <Calendar size={14} style={{ color: "#856404" }} />
-                <span>Authorize Google Calendar</span>
-              </button>
-            ) : (
-              <div 
-                style={{ 
-                  display: "inline-flex", 
-                  alignItems: "center", 
-                  gap: "0.35rem", 
-                  padding: "0.4rem 0.75rem", 
-                  fontSize: "0.8rem", 
-                  height: "32px", 
-                  background: "#f8d7da", 
-                  border: "1px solid #f5c6cb", 
-                  borderRadius: "4px", 
-                  color: "#000000", 
-                  fontWeight: "600" 
-                }}
-                title="Populate GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env"
-              >
-                <AlertCircle size={14} style={{ color: "#721c24" }} />
-                <span>Google OAuth Not Configured (.env)</span>
-              </div>
-            )}
-
-            <button 
-              className="btn btn-primary"
-              style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.75rem", fontSize: "0.8rem", height: "32px" }}
-              onClick={handleCheckReplies}
-              disabled={checkingReplies}
-            >
-              <RefreshCcw size={14} className={checkingReplies ? "spin" : ""} />
-              <span>{checkingReplies ? "Scanning Inbox..." : "Check Live Replies"}</span>
-            </button>
-            <button 
-              className="btn btn-secondary" 
-              style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.75rem", fontSize: "0.8rem", height: "32px" }}
-              onClick={handleReset}
-              disabled={resetting}
-            >
-              <RefreshCcw size={14} className={resetting ? "spin" : ""} />
-              <span>Reset Campaigns</span>
-            </button>
-            <button 
-              className="btn btn-secondary" 
-              style={{ 
-                display: "inline-flex", 
-                alignItems: "center", 
-                gap: "0.35rem", 
-                padding: "0.4rem 0.75rem", 
-                fontSize: "0.8rem", 
-                height: "32px",
-                background: "rgba(139, 92, 246, 0.1)",
-                color: "var(--accent-purple)",
-                border: "1px solid rgba(139, 92, 246, 0.2)"
-              }}
-              onClick={handleExportLeadsToCsv}
-            >
-              <Download size={14} />
-              <span>Export Leads (CSV)</span>
-            </button>
-          </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-4">
+        <div>
+          <h2 className="font-headline-lg text-headline-lg text-on-surface mb-1">MOU & Outreach Automation</h2>
+          <p className="text-on-surface-variant font-body-md">Draft, customize, and transmit legal partnership documents in minutes.</p>
         </div>
-      </div>
-
-      {/* integrated collapsible Academic Collab MOU Generator */}
-      <div className="glass-card" style={{ padding: "1.5rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              ✍ Draft & Execute Academic Collaboration MOU
-            </h3>
-            <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-dim)" }}>
-              Select an incubator, fill in partner academic institution details, digitally sign, and send the official MOU via email.
-            </p>
-          </div>
+        
+        {/* Navigation Tabs */}
+        <div className="flex bg-surface-container border border-outline-variant/60 rounded-xl p-1 gap-1">
           <button 
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setShowMouForm(!showMouForm)}
-            style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem", minWidth: "120px" }}
+            onClick={() => setActiveTab("generator")}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${activeTab === "generator" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-surface-container-high"}`}
           >
-            {showMouForm ? "Hide Form" : "Open MoU Draft"}
+            MOU Generator
+          </button>
+          <button 
+            onClick={() => setActiveTab("leads")}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${activeTab === "leads" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-surface-container-high"}`}
+          >
+            Active Leads
+          </button>
+          <button 
+            onClick={() => setActiveTab("controls")}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${activeTab === "controls" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-surface-container-high"}`}
+          >
+            Campaign Controls
+          </button>
+          <button 
+            onClick={() => setActiveTab("console")}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${activeTab === "console" ? "bg-primary text-white shadow-sm" : "text-on-surface-variant hover:bg-surface-container-high"}`}
+          >
+            Console & Events
           </button>
         </div>
+      </div>
 
-        {showMouForm && (
-          <form onSubmit={handleSendMou} className="animate-in" style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border-color)", paddingTop: "1.5rem" }}>
+      {/* Main Content Areas */}
+      {activeTab === "generator" && (
+        <div className="grid grid-cols-12 gap-8">
+          {/* Left Column: Controls & Settings */}
+          <div className="col-span-12 lg:col-span-4 space-y-6">
             
-            {/* Search & Select First Party Panel */}
-            <div className="form-group" style={{ background: "rgba(255, 255, 255, 0.02)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border-color)", marginBottom: "1.5rem" }}>
-              <label style={{ fontWeight: "700", marginBottom: "0.75rem", display: "block", color: "#000000" }}>
-                🔍 Search & Select First Party (Incubator)
-              </label>
-              
-              {/* Filter Inputs Grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="Search by name, source..." 
-                  value={incSearchQuery}
-                  onChange={(e) => setIncSearchQuery(e.target.value)}
-                  style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-                />
-                <select 
-                  className="form-input" 
-                  value={incSelectedRegion} 
-                  onChange={(e) => { setIncSelectedRegion(e.target.value); setIncSelectedState(""); setIncSelectedCity(""); }}
-                  style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-                >
-                  <option value="">All Regions</option>
-                  {regionsList.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <select 
-                  className="form-input" 
-                  value={incSelectedState} 
-                  onChange={(e) => setIncSelectedState(e.target.value)}
-                  style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-                >
-                  <option value="">All States</option>
-                  {statesList.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select 
-                  className="form-input" 
-                  value={incSelectedCity} 
-                  onChange={(e) => setIncSelectedCity(e.target.value)}
-                  style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-                >
-                  <option value="">All Cities</option>
-                  {citiesList.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select 
-                  className="form-input" 
-                  value={incSelectedSector} 
-                  onChange={(e) => setIncSelectedSector(e.target.value)}
-                  style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-                >
-                  <option value="">All Sectors</option>
-                  {sectorsList.map(sec => <option key={sec} value={sec}>{sec}</option>)}
-                </select>
+            {/* Step 1: Select Incubator */}
+            <div className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 rounded-full bg-primary-container text-white flex items-center justify-center font-bold text-sm">1</div>
+                <h3 className="font-title-lg text-title-lg text-on-surface">Select Incubator</h3>
               </div>
-
-              {/* Selection Dropdown */}
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <select 
-                  className="form-input"
-                  value={selectedIncId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedIncId(id);
-                    const sel = incubators.find(i => i.id === id);
-                    if (sel) {
-                      // Auto-fill rep title from DB
-                      if (sel.founder_or_head) setIncubatorRep(sel.founder_or_head);
-                      // Auto-fill sectors from DB focus_areas
-                      if (sel.focus_areas) {
-                        const secs = Array.isArray(sel.focus_areas)
-                          ? sel.focus_areas.join(", ")
-                          : typeof sel.focus_areas === "string" ? sel.focus_areas : "";
-                        if (secs) setTargetSectors(secs);
+              <div className="space-y-4">
+                <div>
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Institution Name</label>
+                  <select 
+                    value={selectedIncName}
+                    onChange={(e) => {
+                      const matched = incubators.find(i => i.name === e.target.value);
+                      if (matched) {
+                        setSelectedIncName(matched.name);
+                        setSelectedLocation(`${matched.city ? matched.city + ", " : ""}${matched.state}`);
+                        setRecipientEmail(matched.email || "partnerships@nits.ac.in");
+                        setEmailSubject(`Partnership MOU: Incubator Hub x ${matched.name}`);
+                        setFocusAreas(matched.organization_type || "DeepTech, AI/ML, SaaS");
+                      } else {
+                        setSelectedIncName(e.target.value);
                       }
-                    }
-                  }}
-                  required
-                  style={{ flex: 1, color: "black", background: "#f8fafc" }}
-                >
-                  <option value="">-- Select matching incubator ({filteredIncubators.length} found) --</option>
-                  {filteredIncubators.map(inc => (
-                    <option key={inc.id} value={inc.id}>{inc.name} ({inc.city ? `${inc.city}, ` : ""}{inc.state})</option>
-                  ))}
-                </select>
-                {(incSearchQuery || incSelectedRegion || incSelectedState || incSelectedCity || incSelectedSector) && (
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    style={{ padding: "0.4rem 0.75rem", fontSize: "0.8rem" }}
-                    onClick={() => {
-                      setIncSearchQuery("");
-                      setIncSelectedRegion("");
-                      setIncSelectedState("");
-                      setIncSelectedCity("");
-                      setIncSelectedSector("");
                     }}
+                    className="w-full px-4 py-2.5 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                   >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-
-              {/* Selected incubator detail card */}
-              {selectedIncId && (() => {
-                const sel = incubators.find(i => i.id === selectedIncId);
-                if (!sel) return null;
-                const secs = sel.focus_areas
-                  ? (Array.isArray(sel.focus_areas) ? sel.focus_areas : String(sel.focus_areas).split(",").map(s => s.trim()))
-                  : [];
-                return (
-                  <div style={{
-                    marginTop: "0.75rem",
-                    padding: "0.75rem 1rem",
-                    borderRadius: "8px",
-                    background: "linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(139,92,246,0.06) 100%)",
-                    border: "1px solid rgba(99,102,241,0.18)",
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "0.4rem 1.5rem",
-                    fontSize: "0.82rem"
-                  }}>
-                    <div style={{ gridColumn: "1 / -1", fontWeight: 800, color: "var(--primary)", fontSize: "0.95rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      🏛️ {sel.name}
-                    </div>
-                    {sel.organization_type && <div><span style={{ color: "var(--text-dim)" }}>Type: </span><strong>{sel.organization_type}</strong></div>}
-                    {sel.city && sel.state && <div><span style={{ color: "var(--text-dim)" }}>Location: </span><strong>{sel.city}, {sel.state}</strong></div>}
-                    {sel.email && <div><span style={{ color: "var(--text-dim)" }}>Email: </span><strong style={{ color: "#4f46e5" }}>{sel.email}</strong></div>}
-                    {sel.website && <div><span style={{ color: "var(--text-dim)" }}>Website: </span><a href={sel.website} target="_blank" rel="noreferrer" style={{ color: "#6366f1", fontWeight: 600 }}>{sel.website.replace(/^https?:\/\//, "")}</a></div>}
-                    {sel.founder_or_head && <div><span style={{ color: "var(--text-dim)" }}>Head: </span><strong>{sel.founder_or_head}</strong></div>}
-                    {sel.startup_count != null && <div><span style={{ color: "var(--text-dim)" }}>Startups: </span><strong>{sel.startup_count}</strong></div>}
-                    {secs.length > 0 && (
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <span style={{ color: "var(--text-dim)" }}>Focus Areas: </span>
-                        {secs.map((s, i) => (
-                          <span key={i} style={{ display: "inline-block", background: "rgba(99,102,241,0.1)", color: "#4f46e5", borderRadius: "4px", padding: "0.1rem 0.4rem", fontSize: "0.75rem", marginRight: "0.3rem", marginTop: "0.2rem", fontWeight: 600 }}>{s}</span>
-                        ))}
-                      </div>
-                    )}
-                    {sel.description && (
-                      <div style={{ gridColumn: "1 / -1", color: "var(--text-dim)", fontSize: "0.78rem", marginTop: "0.2rem", lineHeight: 1.4 }}>
-                        {String(sel.description).slice(0, 200)}{String(sel.description).length > 200 ? "…" : ""}
-                      </div>
-                    )}
+                    <option value="">Select an incubator...</option>
+                    {incubators.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
+                  </select>
+                </div>
+                <div className="p-4 bg-surface-container-low rounded-lg space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-on-surface-variant font-medium">Location:</span>
+                    <span className="font-bold text-on-surface">{selectedLocation}</span>
                   </div>
-                );
-              })()}
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-              <div className="form-group">
-                <label>First Party Representative Signature Title</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={incubatorRep}
-                  onChange={(e) => setIncubatorRep(e.target.value)}
-                  placeholder="e.g. Director / Head of Incubation"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Second Party (Partner Academic/Research Institution Name)</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={partyBName} 
-                  onChange={(e) => setPartyBName(e.target.value)}
-                  placeholder="e.g. InCubein Pune Center"
-                  required
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-              <div className="form-group">
-                <label>Second Party Representative Name</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={partyBRep} 
-                  onChange={(e) => setPartyBRep(e.target.value)}
-                  placeholder="e.g. Dr. Rajesh Sharma"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Second Party Contact Email (Receives MOU)</label>
-                <input 
-                  type="email" 
-                  className="form-input" 
-                  value={partyBEmail} 
-                  onChange={(e) => setPartyBEmail(e.target.value)}
-                  placeholder="e.g. kadurugved0@gmail.com"
-                  required
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-              <div className="form-group">
-                <label>MoU Execution Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={mouDate}
-                  onChange={(e) => setMouDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>MoU Valid Duration</label>
-                <select 
-                  className="form-input" 
-                  value={duration} 
-                  onChange={(e) => setDuration(e.target.value)}
-                >
-                  <option value="1 Year">1 Year</option>
-                  <option value="2 Years">2 Years</option>
-                  <option value="3 Years">3 Years</option>
-                  <option value="5 Years">5 Years</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: "1.5rem" }}>
-              <label>Collaboration Sectors / Focus Areas</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                value={targetSectors}
-                onChange={(e) => setTargetSectors(e.target.value)}
-                placeholder="e.g. Biotechnology, Nanotechnology, AI Research"
-              />
-            </div>
-
-            <div className="form-group" style={{ marginBottom: "1.5rem" }}>
-              <label>Draw Digital Signature (First Party Signature)</label>
-              <div className="sig-pad-container">
-                <div className="sig-pad-header">
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>Draw signature inside the box below</span>
-                  {signatureData && <span style={{ fontSize: "0.75rem", color: "var(--accent-green)", fontWeight: 700 }}>✓ Signature Adopted</span>}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-on-surface-variant font-medium">Contact:</span>
+                    <span className="font-bold text-on-surface">{recipientEmail}</span>
+                  </div>
                 </div>
-                <canvas 
-                  ref={canvasRef}
-                  className="sig-canvas"
-                  width={450}
-                  height={150}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                  style={{ background: "#f8fafc", border: "1px solid var(--border-color)", borderRadius: "6px", width: "100%", height: "150px" }}
+              </div>
+            </div>
+
+            {/* Step 2: MOU Execution & Signature */}
+            <div className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant shadow-sm space-y-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-full bg-primary-container text-white flex items-center justify-center font-bold text-sm">2</div>
+                <h3 className="font-title-lg text-title-lg text-on-surface">MOU Details</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Execution Date</label>
+                  <input 
+                    type="date" 
+                    value={executionDate}
+                    onChange={(e) => setExecutionDate(e.target.value)}
+                    className="w-full px-4 py-2 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Duration</label>
+                  <select 
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="w-full px-4 py-2 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  >
+                    <option value="1 Year">1 Year</option>
+                    <option value="2 Years">2 Years</option>
+                    <option value="3 Years">3 Years</option>
+                    <option value="5 Years">5 Years</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Focus Areas</label>
+                <input 
+                  type="text" 
+                  value={focusAreas}
+                  onChange={(e) => setFocusAreas(e.target.value)}
+                  placeholder="e.g. DeepTech, AgriTech" 
+                  className="w-full px-4 py-2 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                 />
-                <div className="sig-pad-footer" style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                  <button type="button" className="btn btn-secondary" style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }} onClick={clearSignature}>
-                    <Trash2 size={12} /> Clear
-                  </button>
-                  <label className="btn btn-secondary" style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem", margin: 0 }}>
-                    <Upload size={12} /> Upload Image
+              </div>
+              
+              <div className="pt-4 border-t border-outline-variant">
+                <label className="block font-label-md text-label-md text-on-surface-variant mb-2">Digital Signature Pad</label>
+                <div className="relative w-full h-32 bg-surface-container-low border border-dashed border-outline-variant rounded-lg overflow-hidden flex items-center justify-center">
+                  <canvas 
+                    ref={canvasRef}
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawingSignature}
+                    onMouseLeave={stopDrawingSignature}
+                    width={350}
+                    height={120}
+                    className="absolute inset-0 w-full h-full cursor-crosshair"
+                  />
+                  {!signatureSaved && (
+                    <span className="relative text-on-surface-variant/40 pointer-events-none font-medium text-sm">Draw Signature Here</span>
+                  )}
+                  {signatureSaved && (
+                    <span className="relative text-primary pointer-events-none font-bold text-sm bg-white/95 px-3 py-1 rounded shadow-sm">Signature Adopted</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <button onClick={clearCanvas} className="py-2 text-xs font-bold border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">Clear</button>
+                  <button onClick={() => toast.info("Use the canvas to draw signature directly.")} className="py-2 text-xs font-bold border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">Upload</button>
+                  <button onClick={adoptSignature} className="py-2 text-xs font-bold bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors cursor-pointer">Adopt</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3: Outreach Settings */}
+            <div className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 rounded-full bg-primary-container text-white flex items-center justify-center font-bold text-sm">3</div>
+                <h3 className="font-title-lg text-title-lg text-on-surface">Outreach Settings</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Recipient Email</label>
+                  <input 
+                    type="email" 
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block font-label-md text-label-md text-on-surface-variant mb-1.5">Email Subject</label>
+                  <input 
+                    type="text" 
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-outline-variant rounded-lg font-body-md text-on-surface focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  />
+                </div>
+                <div className="pt-4 border-t border-outline-variant">
+                  <label className="flex items-center gap-3 cursor-pointer group">
                     <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: "none" }} 
-                      onChange={handleSignatureUpload} 
+                      type="checkbox" 
+                      checked={trackEmails}
+                      onChange={(e) => setTrackEmails(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary border-outline-variant focus:ring-primary"
                     />
+                    <span className="text-body-md text-on-surface-variant group-hover:text-on-surface">Track email opens and clicks</span>
                   </label>
-                  <button type="button" className="btn btn-primary" style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem", marginLeft: "auto" }} onClick={adoptSignature}>
-                    Adopt Signature
-                  </button>
                 </div>
               </div>
             </div>
 
-            {mouSendStatus && (
-              <div className={`alert ${mouSendStatus.type === "success" ? "alert-success" : "alert-error"}`} style={{ 
-                padding: "0.75rem", borderRadius: "6px", marginBottom: "1rem", 
-                background: mouSendStatus.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(220,38,38,0.12)",
-                color: mouSendStatus.type === "success" ? "var(--accent-green)" : "var(--accent-red)",
-                border: `1px solid ${mouSendStatus.type === "success" ? "rgba(16,185,129,0.2)" : "rgba(220,38,38,0.2)"}`
-              }}>
-                {mouSendStatus.message}
-              </div>
-            )}
-
+            {/* Submit Button */}
             <button 
-              type="submit" 
-              className="btn btn-primary" 
-              style={{ width: "100%", padding: "0.75rem", fontSize: "0.95rem" }} 
-              disabled={sendingMou}
+              onClick={handleSendMou}
+              className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/95 active:scale-[0.99] transition-all flex items-center justify-center gap-3 group cursor-pointer"
             >
-              {sendingMou ? "Transmitting executed agreement..." : "Adopt Signature & Transmit MOU via SMTP"}
+              <span>Send MOU via Email</span>
+              <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">send</span>
             </button>
-          </form>
-        )}
-      </div>
-
-      {/* Directory Lead Finder Card */}
-      <div className="glass-card" style={{ padding: "1.5rem" }}>
-        <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-          🏫 Discover & Add Campaign Leads from Directory
-        </h3>
-        <p style={{ margin: "0 0 1.25rem 0", fontSize: "0.8rem", color: "var(--text-dim)" }}>
-          Search through all academic, government, and private incubators. Filter by confidence score rating stars and add them to your targeted campaigns list.
-        </p>
-
-        {/* Filters Panel */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1rem", background: "rgba(255, 255, 255, 0.01)", padding: "0.75rem", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
-          <input 
-            type="text"
-            className="form-input"
-            placeholder="Search by name, description..."
-            value={dirSearchQuery}
-            onChange={(e) => setDirSearchQuery(e.target.value)}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-          />
-          <select 
-            className="form-input"
-            value={dirSelectedRegion}
-            onChange={(e) => setDirSelectedRegion(e.target.value)}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-          >
-            <option value="">All Regions</option>
-            {regionsList.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select 
-            className="form-input"
-            value={dirSelectedState}
-            onChange={(e) => setDirSelectedState(e.target.value)}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-          >
-            <option value="">All States</option>
-            {statesList.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select 
-            className="form-input"
-            value={dirSelectedSector}
-            onChange={(e) => setDirSelectedSector(e.target.value)}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-          >
-            <option value="">All Sectors</option>
-            {sectorsList.map(sec => <option key={sec} value={sec}>{sec}</option>)}
-          </select>
-          <select 
-            className="form-input"
-            value={dirMinStars}
-            onChange={(e) => setDirMinStars(parseInt(e.target.value))}
-            style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-          >
-            <option value={0}>Any Star Rating</option>
-            <option value={5}>⭐⭐⭐⭐⭐ (5 Stars)</option>
-            <option value={4}>⭐⭐⭐⭐ & above (4+ Stars)</option>
-            <option value={3}>⭐⭐⭐ & above (3+ Stars)</option>
-            <option value={2}>⭐⭐ & above (2+ Stars)</option>
-            <option value={1}>⭐ & above (1+ Star)</option>
-          </select>
-        </div>
-
-        {/* Table List of Incubators (5 per page) */}
-        {paginatedDirIncubators.length === 0 ? (
-          <div style={{ padding: "1.5rem 1rem", textAlign: "center", border: "1px dashed var(--border-color)", borderRadius: "6px", color: "var(--text-dim)", fontSize: "0.85rem" }}>
-            No matching incubators found. Try adjusting your search query or filters.
           </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left", marginBottom: "1rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                  <th style={{ padding: "0.5rem", color: "var(--text-dim)" }}>Incubator</th>
-                  <th style={{ padding: "0.5rem", color: "var(--text-dim)" }}>Region & State</th>
-                  <th style={{ padding: "0.5rem", color: "var(--text-dim)", textAlign: "center" }}>Confidence Star</th>
-                  <th style={{ padding: "0.5rem", color: "var(--text-dim)", textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedDirIncubators.map(inc => {
-                  const isAlreadyLead = leads.some(lead => lead.incubator_id === inc.id);
-                  return (
-                    <tr key={inc.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", verticalAlign: "middle" }}>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
-                        <div style={{ fontWeight: "600", color: "#000000" }}>{inc.name}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "300px" }}>
-                          {inc.description || "No description provided."}
-                        </div>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem" }}>
-                        <div style={{ fontWeight: "500", color: "#000000" }}>{inc.region || "Unknown"}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#000000" }}>{inc.city ? `${inc.city}, ` : ""}{inc.state}</div>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "center", fontSize: "0.85rem" }}>
-                        <span title={`Confidence score: ${(inc.confidence_score || 1.0).toFixed(2)}`}>
-                          {"⭐".repeat(getStarsCount(inc.confidence_score))}
-                        </span>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.5rem", textAlign: "right" }}>
-                        {isAlreadyLead ? (
-                          <span style={{ fontSize: "0.75rem", color: "var(--accent-green)", fontWeight: "600", paddingRight: "0.5rem" }}>
-                            ✓ In Campaigns
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
-                            onClick={() => handleAddLead(inc)}
-                            disabled={addingLeadId === inc.id}
-                          >
-                            {addingLeadId === inc.id ? "Adding..." : "Add to Campaign"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
 
-            {/* Pagination Controls */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                Showing page <strong style={{ color: "black" }}>{dirCurrentPage}</strong> of <strong style={{ color: "black" }}>{totalPages}</strong> ({filteredDirIncubators.length} total incubators matched)
-              </span>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                  onClick={() => setDirCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={dirCurrentPage === 1}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                  onClick={() => setDirCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={dirCurrentPage === totalPages}
-                >
-                  Next
-                </button>
+          {/* Right Column: Document Editor */}
+          <div className="col-span-12 lg:col-span-8 flex flex-col h-full min-h-[700px]">
+            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-lg flex flex-col h-full">
+              {/* Editor Header */}
+              <div className="p-4 border-b border-outline-variant flex items-center justify-between bg-surface-container-low/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded bg-primary-fixed flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined fill-icon">description</span>
+                  </div>
+                  <div>
+                    <h3 className="font-title-lg text-[14px] text-on-surface leading-tight">MOU_Draft_{selectedIncName?.replace(/\s+/g, "_")}.docx</h3>
+                    <p className="text-[11px] text-on-surface-variant">Template: Academic Collaboration</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => toast.info("PDF preview generation requested.")} className="px-3 py-1.5 text-[12px] font-bold text-on-surface-variant hover:bg-surface-container-high rounded transition-all cursor-pointer">Preview PDF</button>
+                  <button onClick={() => toast.success("Document downloaded.")} className="px-3 py-1.5 text-[12px] font-bold text-primary hover:bg-primary/5 rounded transition-all cursor-pointer">Download</button>
+                </div>
+              </div>
+
+              {/* Toolbar */}
+              <div className="px-6 py-2 border-b border-outline-variant flex items-center gap-4 bg-white">
+                <div className="flex items-center gap-1 border-r pr-4 border-outline-variant">
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">undo</span></button>
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">redo</span></button>
+                </div>
+                <div className="flex items-center gap-1 border-r pr-4 border-outline-variant">
+                  <select className="text-[12px] border-none bg-transparent font-medium py-1 px-2 hover:bg-surface-container-low rounded outline-none cursor-pointer">
+                    <option>Normal text</option>
+                    <option>Heading 1</option>
+                    <option>Heading 2</option>
+                  </select>
+                  <select className="text-[12px] border-none bg-transparent font-medium py-1 px-2 hover:bg-surface-container-low rounded outline-none cursor-pointer">
+                    <option>Inter</option>
+                    <option>Roboto</option>
+                    <option>Merriweather</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1 border-r pr-4 border-outline-variant">
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_bold</span></button>
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_italic</span></button>
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_underlined</span></button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_align_left</span></button>
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_align_center</span></button>
+                  <button className="p-1.5 hover:bg-surface-container-low rounded cursor-pointer"><span className="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
+                </div>
+              </div>
+
+              {/* Document Canvas */}
+              <div className="flex-1 bg-surface-container-low p-10 overflow-y-auto editor-container">
+                <div className="max-w-[650px] mx-auto bg-white shadow-lg p-16 min-h-[900px] text-[#1a1a1a] relative">
+                  <div className="absolute top-16 right-16 opacity-10 grayscale">
+                    <div className="w-12 h-12 bg-black rounded-lg"></div>
+                  </div>
+                  <h1 className="text-center font-bold text-xl mb-12 underline uppercase tracking-tight">Memorandum of Understanding</h1>
+                  <div className="space-y-6 text-sm leading-relaxed text-justify">
+                    <p>This Memorandum of Understanding (MOU) is entered into this <span 
+                      onClick={() => {
+                        const dateVal = prompt("Update Execution Date:", executionDate);
+                        if (dateVal) setExecutionDate(dateVal);
+                      }}
+                      className="bg-primary-fixed/30 px-2 py-0.5 rounded font-bold border-b border-primary text-primary-fixed-dim hover:bg-primary-fixed/50 transition-colors" 
+                      style={{ cursor: "pointer" }}
+                    >[Date: {executionDate}]</span> by and between:</p>
+                    
+                    <div className="pl-4 border-l-2 border-outline-variant space-y-4 italic">
+                      <p><strong>Incubator Hub</strong>, having its principal place of business at Global Innovation Center, Tech City, hereafter referred to as "The Service Provider".</p>
+                      <p>AND</p>
+                      <p><strong><span 
+                        onClick={() => {
+                          const nameVal = prompt("Update Partner Name:", selectedIncName);
+                          if (nameVal) setSelectedIncName(nameVal);
+                        }}
+                        className="bg-primary-fixed/30 px-2 py-0.5 rounded font-bold border-b border-primary text-primary-fixed-dim hover:bg-primary-fixed/50 transition-colors" 
+                        style={{ cursor: "pointer" }}
+                      >[Incubator Name: {selectedIncName}]</span></strong>, located at <span 
+                        onClick={() => {
+                          const locVal = prompt("Update Location:", selectedLocation);
+                          if (locVal) setSelectedLocation(locVal);
+                        }}
+                        className="bg-primary-fixed/30 px-2 py-0.5 rounded font-bold border-b border-primary text-primary-fixed-dim hover:bg-primary-fixed/50 transition-colors" 
+                        style={{ cursor: "pointer" }}
+                      >[Location: {selectedLocation}]</span>, hereafter referred to as "The Partner".</p>
+                    </div>
+                    
+                    <p className="font-bold uppercase mt-8">1. Objective</p>
+                    <p>The primary objective of this partnership is to establish a framework for collaboration between The Service Provider and The Partner to foster a startup ecosystem, provide mentorship, and grant access to specialized capital resources for regional entrepreneurs.</p>
+                    
+                    <p className="font-bold uppercase mt-8">2. Scope of Cooperation</p>
+                    <p>The parties agree to cooperate in the following areas:</p>
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li>Joint organization of hackathons and incubation cohorts in the focus areas of: <span 
+                        onClick={() => {
+                          const focusVal = prompt("Update Focus Areas:", focusAreas);
+                          if (focusVal) setFocusAreas(focusVal);
+                        }}
+                        className="bg-primary-fixed/30 px-2 py-0.5 rounded font-bold border-b border-primary text-primary-fixed-dim hover:bg-primary-fixed/50 transition-colors" 
+                        style={{ cursor: "pointer" }}
+                      >[Focus: {focusAreas}]</span></li>
+                      <li>Direct pipeline integration for Series A funding readiness.</li>
+                      <li>Access to proprietary dashboard management tools provided by Incubator Hub.</li>
+                      <li>Mutual recognition as "Strategic Innovation Partners" on all public communication.</li>
+                    </ul>
+                    
+                    <p className="font-bold uppercase mt-8">3. Confidentiality</p>
+                    <p>Both parties agree to maintain strict confidentiality regarding proprietary data, startup metrics, and strategic roadmaps shared during the term of this engagement.</p>
+                    
+                    <div className="grid grid-cols-2 gap-12 mt-20 pt-12">
+                      <div className="border-t border-black pt-4">
+                        <p className="font-bold">Authorized Signatory</p>
+                        <p className="text-xs text-on-surface-variant">Incubator Hub</p>
+                      </div>
+                      <div className="border-t border-black pt-4">
+                        <p className="font-bold">Authorized Signatory</p>
+                        <p className="text-xs text-on-surface-variant">{selectedIncName || "The Partner"}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Metrics Row */}
-      <div className="metrics-grid">
-        <div className="glass-card metric-card">
-          <div className="metric-header">
-            <span className="metric-title">Campaign Leads</span>
-            <span className="metric-icon"><Mail size={18} /></span>
-          </div>
-          <div className="metric-value" style={{ color: "#000000" }}>{leads.length}</div>
-          <div className="metric-footer">Total targeted outreach partners</div>
         </div>
+      )}
 
-        <div className="glass-card metric-card">
-          <div className="metric-header">
-            <span className="metric-title">Outreach Dispatched</span>
-            <span className="metric-icon"><Send size={18} style={{ color: "var(--secondary)" }} /></span>
-          </div>
-          <div className="metric-value" style={{ color: "#000000" }}>{totalSent}</div>
-          <div className="metric-footer">Outreach invitations sent</div>
-        </div>
+      {activeTab === "leads" && (
+        <div className="grid grid-cols-12 gap-8">
+          {/* Leads List (8 columns) */}
+          <div className="col-span-12 lg:col-span-8 space-y-6">
+            <div className="bento-card p-6 rounded-xl shadow-sm">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <h3 className="font-title-lg text-title-lg">📋 Campaign Outreach Leads</h3>
+                
+                {/* Search / Filters */}
+                <div className="flex gap-3 w-full md:w-auto">
+                  <input 
+                    type="text"
+                    value={leadSearchQuery}
+                    onChange={(e) => setLeadSearchQuery(e.target.value)}
+                    placeholder="Search leads..."
+                    className="px-3 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm w-full md:w-48 outline-none text-on-surface"
+                  />
+                  <select
+                    value={leadSelectedStatus}
+                    onChange={(e) => setLeadSelectedStatus(e.target.value)}
+                    className="px-3 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm outline-none text-on-surface"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Sent">Sent</option>
+                    <option value="Replied">Replied</option>
+                    <option value="Meeting Scheduled">Meeting Scheduled</option>
+                  </select>
+                </div>
+              </div>
 
-        <div className="glass-card metric-card">
-          <div className="metric-header">
-            <span className="metric-title">Replies Scanned</span>
-            <span className="metric-icon"><MessageSquare size={18} style={{ color: "var(--primary)" }} /></span>
-          </div>
-          <div className="metric-value" style={{ color: "#000000" }}>{totalReplies}</div>
-          <div className="metric-footer">Inbox responses classified</div>
-        </div>
-
-        <div className="glass-card metric-card">
-          <div className="metric-header">
-            <span className="metric-title">Auto-Scheduled</span>
-            <span className="metric-icon"><Calendar size={18} style={{ color: "var(--accent-green)" }} /></span>
-          </div>
-          <div className="metric-value" style={{ color: "#000000" }}>{totalMeetings}</div>
-          <div className="metric-footer">Meetings synced to Calendar</div>
-        </div>
-      </div>
-
-      {/* Main Grid: Leads List & Console Logs */}
-      <div className="dashboard-grid" style={{ gridTemplateColumns: "1.6fr 1fr", gap: "1.5rem" }}>
-        
-        {/* Leads Management Panel */}
-        <div className="glass-card" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700" }}>📋 Targeted Outreach Campaigns</h3>
-          
-          {/* Campaign Search & Filter Controls */}
-          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.25rem", flexWrap: "wrap" }}>
-            <input 
-              type="text"
-              className="form-input"
-              placeholder="Search leads by name/email..."
-              value={leadSearchQuery}
-              onChange={(e) => setLeadSearchQuery(e.target.value)}
-              style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc", flex: 1, minWidth: "150px" }}
-            />
-            <select 
-              className="form-input"
-              value={leadSelectedStatus}
-              onChange={(e) => setLeadSelectedStatus(e.target.value)}
-              style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc", width: "160px" }}
-            >
-              <option value="">All Statuses</option>
-              <option value="Draft">Draft</option>
-              <option value="Sent">Sent</option>
-              <option value="Replied">Replied</option>
-              <option value="Meeting Scheduled">Meeting Scheduled</option>
-              <option value="Not Interested">Not Interested</option>
-            </select>
-          </div>
-
-          {loading ? (
-            <p style={{ color: "var(--text-dim)", fontSize: "0.9rem" }}>Loading outreach campaigns...</p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                    <th style={{ padding: "0.75rem 0.5rem", color: "var(--text-dim)" }}>Incubator</th>
-                    <th style={{ padding: "0.75rem 0.5rem", color: "var(--text-dim)" }}>Status</th>
-                    <th style={{ padding: "0.75rem 0.5rem", color: "var(--text-dim)", textAlign: "center" }}>Lead Score</th>
-                    <th style={{ padding: "0.75rem 0.5rem", color: "var(--text-dim)", textAlign: "right" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedLeads.map((lead) => (
-                    <tr key={lead.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", verticalAlign: "middle" }}>
-                      <td style={{ padding: "0.75rem 0.5rem" }}>
-                        <div style={{ fontWeight: "600", color: "#000000" }}>{lead.incubator_name}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#000000" }}>{lead.email}</div>
-                      </td>
-                      <td style={{ padding: "0.75rem 0.5rem" }}>
-                        <select
-                          value={lead.status}
-                          onChange={(e) => handleUpdateLeadStatus(lead.id, e.target.value)}
-                          style={{ 
-                            fontSize: "0.72rem", 
-                            padding: "2px 6px", 
-                            borderRadius: "4px",
-                            fontWeight: "700",
-                            border: "1px solid rgba(0,0,0,0.05)",
-                            cursor: "pointer",
-                            outline: "none",
-                            background: 
-                              lead.status === "Meeting Scheduled" ? "#d1fae5" : 
-                              lead.status === "Replied" ? "#ede9fe" :            
-                              lead.status === "Sent" ? "#ecfeff" :               
-                              lead.status === "Not Interested" ? "#fee2e2" :     
-                              "#f3f4f6",                                         
-                            color: 
-                              lead.status === "Meeting Scheduled" ? "#065f46" :
-                              lead.status === "Replied" ? "#5b21b6" :
-                              lead.status === "Sent" ? "#155e75" :
-                              lead.status === "Not Interested" ? "#991b1b" :
-                              "#374151"
-                          }}
-                        >
-                          <option value="Draft">Draft</option>
-                          <option value="Sent">Sent</option>
-                          <option value="Replied">Replied</option>
-                          <option value="Meeting Scheduled">Meeting Scheduled</option>
-                          <option value="Not Interested">Not Interested</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: "0.75rem 0.5rem", textAlign: "center" }}>
-                        {lead.status === "Draft" || lead.status === "Sent" ? (
-                          <span style={{ color: "#000000" }}>-</span>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.2rem" }}>
-                            <span style={{ 
-                              fontWeight: "700", 
-                              color: "#000000"
-                            }}>
-                              {lead.lead_score}
-                            </span>
-                            <div style={{ width: "60px", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", overflow: "hidden" }}>
-                              <div style={{ 
-                                height: "100%", 
-                                width: `${lead.lead_score}%`,
-                                background: lead.lead_score >= 80 ? "var(--accent-green)" : lead.lead_score >= 50 ? "var(--accent-amber)" : "var(--accent-red)"
-                              }} />
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-surface-container-low border-b border-outline-variant">
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-on-surface-variant">Incubator</th>
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-on-surface-variant">Email</th>
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-on-surface-variant">Status</th>
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-on-surface-variant text-center">Score</th>
+                      <th className="py-3 px-4 text-xs font-bold uppercase text-on-surface-variant text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/30">
+                    {currentLeads.map(lead => (
+                      <tr key={lead.id} className="hover:bg-surface-container/20 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-sm text-on-surface">{lead.incubator_name}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-sm text-on-surface-variant">{lead.email}</td>
+                        <td className="py-3.5 px-4 text-sm">
+                          <select
+                            value={lead.status}
+                            onChange={async (e) => {
+                              try {
+                                const res = await fetch("http://127.0.0.1:8000/api/outreach/leads/update-status", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ lead_id: lead.id, status: e.target.value })
+                                });
+                                if (res.ok) {
+                                  toast.success(`Status updated to ${e.target.value}`);
+                                  fetchLeads();
+                                }
+                              } catch (err) {
+                                toast.error("Failed to update status.");
+                              }
+                            }}
+                            className="bg-transparent border-none text-xs font-bold text-primary outline-none focus:ring-0 cursor-pointer"
+                          >
+                            <option value="Draft">Draft</option>
+                            <option value="Sent">Sent</option>
+                            <option value="Replied">Replied</option>
+                            <option value="Meeting Scheduled">Meeting Scheduled</option>
+                            <option value="Not Interested">Not Interested</option>
+                          </select>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="font-bold text-xs">{lead.lead_score || 0}</span>
+                            <div className="w-12 h-1 bg-surface-container-high rounded-full overflow-hidden">
+                              <div className="h-full bg-primary" style={{ width: `${lead.lead_score || 0}%` }}></div>
                             </div>
                           </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "0.75rem 0.5rem", textAlign: "right" }}>
-                        {lead.status === "Draft" && (
-                          <button 
-                            className="btn btn-primary" 
-                            style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-                            onClick={() => handleSendEmail(lead.id, lead.incubator_name, lead.email)}
-                          >
-                            <Send size={12} />
-                            <span>Send Invite</span>
-                          </button>
-                        )}
-                        {lead.status === "Replied" && (
-                          <button 
-                            className="btn btn-primary" 
-                            style={{ 
-                              padding: "0.3rem 0.6rem", 
-                              fontSize: "0.75rem", 
-                              marginRight: "0.35rem",
-                              background: "#e2f0d9",
-                              border: "1px solid #385723",
-                              color: "#000000",
-                              fontWeight: "600"
-                            }}
-                            onClick={() => {
-                              setSelectedLeadForMeeting(lead);
-                              const twoDaysOut = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-                              setMeetingDate(twoDaysOut);
-                              setMeetingTime("11:00 AM");
-                            }}
-                          >
-                            Schedule Meet
-                          </button>
-                        )}
-                        {["Sent", "Replied", "Meeting Scheduled", "Not Interested"].includes(lead.status) && (
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}
-                            onClick={() => setSelectedLeadForDetail(lead)}
-                          >
-                            View Details
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            {lead.status === "Draft" && (
+                              <button 
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetch("http://127.0.0.1:8000/api/outreach/send-email", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ lead_id: lead.id })
+                                    });
+                                    if (res.ok) {
+                                      toast.success("Email Invitation Sent!");
+                                      fetchLeads();
+                                    }
+                                  } catch (err) {
+                                    toast.error("Failed to send invitation.");
+                                  }
+                                }}
+                                className="px-2 py-1 text-xs font-bold bg-primary text-white rounded hover:bg-primary-container cursor-pointer"
+                              >
+                                Send Invite
+                              </button>
+                            )}
+                            {lead.status === "Replied" && (
+                              <button 
+                                onClick={() => {
+                                  setSelectedLeadForMeeting(lead);
+                                  setMeetingDate(new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
+                                }}
+                                className="px-2 py-1 text-xs font-bold bg-secondary text-white rounded hover:bg-secondary/90 cursor-pointer"
+                              >
+                                Schedule Meet
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setSelectedLeadForDetail(lead);
+                                setLeadNotesInput(lead.notes || "");
+                              }}
+                              className="px-2 py-1 text-xs font-bold border border-outline-variant rounded hover:bg-surface-container-high cursor-pointer"
+                            >
+                              Details
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredLeads.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="py-8 text-center text-outline italic">No campaign leads found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-              {/* Leads Pagination Controls */}
-              {filteredLeads.length > leadsItemsPerPage && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem", marginTop: "1rem" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                    Showing page <strong style={{ color: "black" }}>{leadsCurrentPage}</strong> of <strong style={{ color: "black" }}>{totalLeadsPages}</strong> ({filteredLeads.length} total campaigns)
-                  </span>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                      onClick={() => setLeadsCurrentPage(prev => Math.max(1, prev - 1))}
+              {/* Pagination */}
+              {totalLeadsPages > 1 && (
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-outline-variant">
+                  <span className="text-xs text-outline font-medium">Page {leadsCurrentPage} of {totalLeadsPages}</span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setLeadsCurrentPage(p => Math.max(1, p - 1))}
                       disabled={leadsCurrentPage === 1}
+                      className="px-2.5 py-1 text-xs border border-outline-variant rounded hover:bg-surface shadow-sm cursor-pointer disabled:opacity-40"
                     >
-                      Previous
+                      Prev
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                      onClick={() => setLeadsCurrentPage(prev => Math.min(totalLeadsPages, prev + 1))}
+                    <button 
+                      onClick={() => setLeadsCurrentPage(p => Math.min(totalLeadsPages, p + 1))}
                       disabled={leadsCurrentPage === totalLeadsPages}
+                      className="px-2.5 py-1 text-xs border border-outline-variant rounded hover:bg-surface shadow-sm cursor-pointer disabled:opacity-40"
                     >
                       Next
                     </button>
@@ -1724,446 +904,228 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                 </div>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Live Terminal & Calendar Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          
-          {/* Console Log Terminal */}
-          <div className="glass-card" style={{ padding: "1.25rem", display: "flex", flexDirection: "column", height: "300px", background: "#0b0f19", border: "1px solid var(--border-color)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "0.5rem" }}>
-              <h4 style={{ margin: 0, fontSize: "0.85rem", color: "var(--secondary)", display: "flex", alignItems: "center", gap: "0.35rem", fontWeight: "700" }}>
-                <span className="dot spin" style={{ width: "8px", height: "8px", background: "var(--secondary)", borderRadius: "50%", display: "inline-block" }} />
-                <span>Campaign Console Log</span>
-              </h4>
-              <span style={{ fontSize: "0.7rem", color: "var(--text-dim)", fontFamily: "monospace" }}>STDOUT_LIVE</span>
-            </div>
-            
-            <div style={{ 
-              flex: 1, 
-              overflowY: "auto", 
-              fontFamily: "monospace", 
-              fontSize: "0.75rem", 
-              color: "#38bdf8", 
-              lineHeight: "1.4",
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.35rem",
-              paddingRight: "0.5rem"
-            }}>
-              {terminalLogs.map((log, idx) => (
-                <div key={idx} style={{ display: "flex", gap: "0.5rem" }}>
-                  <span style={{ color: "var(--text-dim)", flexShrink: 0 }}>[{log.time}]</span>
-                  <span style={{ 
-                    color: 
-                      log.src === "SYSTEM" ? "var(--accent-amber)" : 
-                      log.src === "OUTREACH" ? "var(--secondary)" :
-                      log.src === "AI_ENGINE" ? "#ec4899" :
-                      log.src === "CALENDAR" ? "var(--accent-green)" :
-                      "var(--accent-red)",
-                    fontWeight: "600",
-                    flexShrink: 0
-                  }}>
-                    {log.src}:
-                  </span>
-                  <span style={{ color: "#f8fafc", wordBreak: "break-all" }}>{log.msg}</span>
-                </div>
-              ))}
-              <div ref={terminalEndRef} />
-            </div>
           </div>
 
-          {/* Calendar Sync panel */}
-          <div className="glass-card" style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              📅 Calendar Meeting Sync
-            </h4>
-            
-            {meetings.length === 0 ? (
-              <div style={{ 
-                padding: "2rem 1rem", 
-                textAlign: "center", 
-                border: "1px dashed var(--border-color)", 
-                borderRadius: "6px",
-                color: "var(--text-dim)",
-                fontSize: "0.8rem"
-              }}>
-                <Clock size={20} style={{ margin: "0 auto 0.5rem auto", opacity: 0.5 }} />
-                <span>No automated meetings scheduled yet. Trigger outreach and reply checking to sync.</span>
+          {/* Lead Details Side Drawer inside the tab (4 columns) */}
+          <div className="col-span-12 lg:col-span-4 space-y-6">
+            {selectedLeadForDetail ? (
+              <div className="bento-card p-6 rounded-xl shadow-sm space-y-6">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-title-lg text-title-lg text-on-surface">Lead Information</h3>
+                  <button onClick={() => setSelectedLeadForDetail(null)} className="text-outline hover:text-on-surface cursor-pointer">
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+                
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <label className="text-xs font-bold text-outline uppercase block mb-1">Institution</label>
+                    <span className="font-bold text-on-surface text-base">{selectedLeadForDetail.incubator_name}</span>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-outline uppercase block mb-1">Status</label>
+                    <span className="bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded text-xs font-bold uppercase">{selectedLeadForDetail.status}</span>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-outline uppercase block mb-1">Lead Score</label>
+                    <span className="font-bold text-on-surface">{selectedLeadForDetail.lead_score || 0} / 100</span>
+                  </div>
+                  <div className="pt-4 border-t border-outline-variant">
+                    <label className="text-xs font-bold text-outline uppercase block mb-1">Latest Correspondence / Notes</label>
+                    <textarea 
+                      value={leadNotesInput}
+                      onChange={(e) => setLeadNotesInput(e.target.value)}
+                      rows="4"
+                      className="w-full p-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm outline-none text-on-surface"
+                      placeholder="Add conversation notes..."
+                    />
+                    <button 
+                      onClick={() => handleUpdateNotes(selectedLeadForDetail.id)}
+                      className="mt-2 px-3 py-1.5 text-xs font-bold bg-primary text-white rounded hover:bg-primary-container cursor-pointer"
+                    >
+                      Save Notes
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div style={{ 
-                display: "flex", 
-                flexDirection: "column", 
-                gap: "0.75rem", 
-                maxHeight: meetings.length > 2 ? "190px" : "auto", 
-                overflowY: meetings.length > 2 ? "auto" : "visible",
-                paddingRight: "4px"
-              }}>
-                {meetings.map((meeting) => (
-                  <div 
-                    key={meeting.id} 
-                    style={{ 
-                      padding: "0.75rem", 
-                      background: 
-                        meeting.status === "Completed" ? "rgba(71, 85, 105, 0.05)" : 
-                        meeting.status === "Cancelled" ? "rgba(220, 38, 38, 0.05)" : 
-                        meeting.status === "Confirmed" ? "rgba(16, 185, 129, 0.08)" : 
-                        "rgba(16, 185, 129, 0.04)",
-                      border: 
-                        meeting.status === "Completed" ? "1px solid rgba(71, 85, 105, 0.2)" :
-                        meeting.status === "Cancelled" ? "1px solid rgba(220, 38, 38, 0.2)" :
-                        meeting.status === "Confirmed" ? "1px solid rgba(16, 185, 129, 0.3)" :
-                        "1px solid rgba(16, 185, 129, 0.15)",
-                      borderRadius: "6px" 
-                    }}
-                  >
-                    <div style={{ fontSize: "0.8rem", fontWeight: "700", color: "#000000" }}>{meeting.title}</div>
-                    <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem", color: "#000000", marginTop: "0.25rem" }}>
-                      <span>📅 {meeting.date}</span>
-                      <span>⏰ {meeting.time}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.5rem", borderTop: "1px solid rgba(0,0,0,0.05)", paddingTop: "0.5rem" }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-                        <span style={{ fontSize: "0.7rem", color: "var(--accent-green)", fontWeight: "600" }}>✓ Google Meet Generated</span>
-                        <span style={{ 
-                          fontSize: "0.7rem", 
-                          fontWeight: "700",
-                          color: 
-                            meeting.status === "Confirmed" ? "var(--accent-green)" : 
-                            meeting.status === "Completed" ? "var(--primary)" :
-                            meeting.status === "Cancelled" ? "var(--accent-red)" :
-                            "#e28743"
-                        }}>
-                          Status: {meeting.status || "Scheduled"}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                        {(meeting.status === "Scheduled" || !meeting.status) && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateMeetingStatus(meeting.id, "Confirmed")}
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "white",
-                                background: "var(--primary)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                border: "none",
-                                cursor: "pointer",
-                                fontWeight: "600"
-                              }}
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateMeetingStatus(meeting.id, "Cancelled")}
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "white",
-                                background: "var(--accent-red)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                border: "none",
-                                cursor: "pointer",
-                                fontWeight: "600"
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        )}
-                        {meeting.status === "Confirmed" && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateMeetingStatus(meeting.id, "Completed")}
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "white",
-                                background: "var(--accent-green)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                border: "none",
-                                cursor: "pointer",
-                                fontWeight: "600"
-                              }}
-                            >
-                              Complete
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateMeetingStatus(meeting.id, "Cancelled")}
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "white",
-                                background: "var(--accent-red)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                border: "none",
-                                cursor: "pointer",
-                                fontWeight: "600"
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        )}
-                        <a 
-                          href={meeting.meeting_link || "https://meet.google.com"} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          style={{ 
-                            fontSize: "0.7rem", 
-                            color: "white", 
-                            background: "var(--accent-green)", 
-                            padding: "2px 6px", 
-                            borderRadius: "4px", 
-                            textDecoration: "none",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.2rem"
-                          }}
-                        >
-                          <span>Join</span>
-                          <ExternalLink size={10} />
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMeeting(meeting.id)}
-                          style={{
-                            fontSize: "0.7rem",
-                            color: "white",
-                            background: "var(--accent-red)",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            border: "none",
-                            cursor: "pointer",
-                            fontWeight: "600",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.2rem"
-                          }}
-                          title="Remove from sync & cancel calendar event"
-                        >
-                          <Trash2 size={10} />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="bento-card p-6 rounded-xl shadow-sm text-center py-16 text-outline italic">
+                Select a lead to view details and correspondence history.
               </div>
             )}
 
-            {/* Google Calendar Public Events Section */}
-            {externalEvents.length > 0 && (
-              <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border-color)", paddingTop: "1rem" }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: "700", color: "var(--primary)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <span>🏛 Academic & Public Holidays</span>
+            {/* Meeting Scheduler dialog */}
+            {selectedLeadForMeeting && (
+              <form onSubmit={handleScheduleMeeting} className="bento-card p-6 rounded-xl shadow-sm space-y-4">
+                <h3 className="font-title-lg text-title-lg">📅 Schedule Meeting</h3>
+                <p className="text-xs text-outline-variant">Schedule Google Calendar meeting with {selectedLeadForMeeting.incubator_name}.</p>
+                <div>
+                  <label className="block text-xs font-bold text-outline uppercase mb-1">Meeting Date</label>
+                  <input 
+                    type="date" 
+                    value={meetingDate}
+                    onChange={(e) => setMeetingDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface outline-none"
+                  />
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: "150px", overflowY: "auto" }}>
-                  {externalEvents.map((evt, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", background: "#f8fafc", padding: "5px 8px", borderRadius: "4px", border: "1px solid var(--border-color)" }}>
-                      <span style={{ color: "#000000", fontWeight: "600", marginRight: "0.5rem" }}>{evt.summary}</span>
-                      <span style={{ color: "#000000", flexShrink: 0 }}>{evt.date}</span>
-                    </div>
-                  ))}
+                <div>
+                  <label className="block text-xs font-bold text-outline uppercase mb-1">Meeting Time</label>
+                  <input 
+                    type="text" 
+                    value={meetingTime}
+                    onChange={(e) => setMeetingTime(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface outline-none"
+                    placeholder="e.g. 11:00 AM"
+                  />
                 </div>
-              </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <button type="button" onClick={() => setSelectedLeadForMeeting(null)} className="px-3 py-1.5 text-xs font-bold border border-outline-variant rounded hover:bg-surface-container-high cursor-pointer">Cancel</button>
+                  <button type="submit" disabled={schedulingMeeting} className="px-3 py-1.5 text-xs font-bold bg-primary text-white rounded hover:bg-primary-container cursor-pointer">
+                    {schedulingMeeting ? "Scheduling..." : "Schedule"}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
-
         </div>
-      </div>
+      )}
 
-      {/* View Result / Detail Drawer Modal */}
-      {selectedLeadForDetail && (
-        <div className="drawer-backdrop" style={{ zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setSelectedLeadForDetail(null)}>
-          <div className="glass-card" style={{ width: "90%", maxWidth: "550px", padding: "1.5rem", background: "#ffffff", border: "1px solid var(--border-color)", zIndex: 10001 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.15rem", color: "var(--primary)", fontWeight: "800" }}>
-              📊 AI Outreach Result Analysis
+      {activeTab === "controls" && (
+        <div className="max-w-xl mx-auto space-y-6">
+          {/* Campaign Controls Card */}
+          <div className="bento-card p-6 rounded-xl shadow-sm space-y-6">
+            <h3 className="font-title-lg text-title-lg flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[22px]">campaign</span>
+              <span>Campaign Management</span>
             </h3>
             
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center pb-4 border-b border-outline-variant/60">
                 <div>
-                  <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Incubator Name</strong>
-                  <div style={{ fontWeight: "700", color: "#000000" }}>{selectedLeadForDetail.incubator_name}</div>
-                  <div style={{ fontSize: "0.85rem", color: "#000000" }}>{selectedLeadForDetail.email}</div>
+                  <p className="font-bold text-sm text-on-surface">Inbox Synch Sync Interval</p>
+                  <p className="text-xs text-outline">Frequency in minutes to scan for new reply emails.</p>
                 </div>
-                <div>
-                  <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Campaign Status</strong>
-                  <div style={{ marginTop: "0.25rem" }}>
-                    <select
-                      value={selectedLeadForDetail.status}
-                      onChange={(e) => handleUpdateLeadStatus(selectedLeadForDetail.id, e.target.value)}
-                      className="form-input"
-                      style={{ 
-                        fontSize: "0.8rem", 
-                        padding: "0.3rem 0.5rem", 
-                        color: "black", 
-                        background: "#f8fafc",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "4px"
-                      }}
-                    >
-                      <option value="Draft">Draft</option>
-                      <option value="Sent">Sent</option>
-                      <option value="Replied">Replied</option>
-                      <option value="Meeting Scheduled">Meeting Scheduled</option>
-                      <option value="Not Interested">Not Interested</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Latest Reply Received</strong>
-                <div style={{ 
-                  background: "#f8fafc", 
-                  padding: "0.75rem", 
-                  borderRadius: "6px", 
-                  fontSize: "0.85rem", 
-                  color: "#000000", 
-                  border: "1px solid var(--border-color)",
-                  marginTop: "0.25rem",
-                  maxHeight: "100px",
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap"
-                }}>
-                  {selectedLeadForDetail.reply_text ? `"${selectedLeadForDetail.reply_text}"` : "No reply detected yet. Send email and reply to it, then click Scanning Inbox."}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Intent Classification</strong>
-                  <div style={{ marginTop: "0.25rem" }}>
-                    <span style={{ 
-                      fontSize: "0.8rem", 
-                      fontWeight: "700",
-                      color: "#000000"
-                    }}>
-                      {selectedLeadForDetail.intent_classification || "Not Scanned Yet"}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Computed Lead Score</strong>
-                  <div style={{ fontWeight: "700", fontSize: "1.1rem", color: "#000000" }}>
-                    {selectedLeadForDetail.lead_score}/100
-                  </div>
-                </div>
-              </div>
-
-              {/* Campaign Notes & CRM History section */}
-              <div>
-                <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Campaign Notes & CRM History</strong>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  value={leadNotesInput}
-                  onChange={(e) => setLeadNotesInput(e.target.value)}
-                  placeholder="Enter custom notes, key contact points, or partnership status details..."
-                  style={{ 
-                    color: "#000000", 
-                    background: "#f8fafc", 
-                    width: "100%", 
-                    padding: "0.5rem", 
-                    fontSize: "0.85rem", 
-                    marginTop: "0.25rem",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: "6px",
-                    resize: "vertical"
-                  }}
+                <input 
+                  type="number"
+                  value={syncInterval}
+                  onChange={(e) => handleSyncIntervalChange(parseInt(e.target.value) || 30)}
+                  className="w-20 px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-center text-on-surface font-bold outline-none"
                 />
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ marginTop: "0.5rem", padding: "0.35rem 0.75rem", fontSize: "0.8rem", background: "var(--primary)" }}
-                  onClick={() => handleUpdateLeadNotes(selectedLeadForDetail.id, leadNotesInput)}
+              </div>
+
+              <div className="flex justify-between items-center pb-4 border-b border-outline-variant/60">
+                <div>
+                  <p className="font-bold text-sm text-on-surface">Inbox Scan & Sync</p>
+                  <p className="text-xs text-outline">Scan connected inbox for replies and run AI sentiment scorer.</p>
+                </div>
+                <button 
+                  onClick={handleCheckReplies}
+                  disabled={checkingReplies}
+                  className="px-4 py-2 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary-container shadow-md cursor-pointer flex items-center gap-1.5 transition-all"
                 >
-                  Save Notes
+                  <span className={`material-symbols-outlined text-sm ${checkingReplies ? "spin" : ""}`}>sync</span>
+                  <span>Check Replies</span>
                 </button>
               </div>
-            </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "1.5rem" }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => setSelectedLeadForDetail(null)}
-              >
-                Close
-              </button>
+              <div className="flex justify-between items-center pb-4 border-b border-outline-variant/60">
+                <div>
+                  <p className="font-bold text-sm text-on-surface">Google Calendar Integration</p>
+                  <p className="text-xs text-outline">Access Google Calendar to check scheduler and sync dates.</p>
+                </div>
+                {oauthAuthorized ? (
+                  <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Connected</span>
+                ) : oauthConfigured ? (
+                  <button 
+                    onClick={handleAuthorizeCalendar}
+                    className="px-4 py-2 text-xs font-bold bg-amber-500 text-white rounded-lg hover:bg-amber-600 shadow-md cursor-pointer flex items-center gap-1.5 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-sm">calendar_month</span>
+                    <span>Connect Google Calendar</span>
+                  </button>
+                ) : (
+                  <span className="bg-error-container/10 text-error text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Config Missing (.env)</span>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-sm text-on-surface">Reset Pipeline Database</p>
+                  <p className="text-xs text-outline">Danger: Clear all campaign status logs, active leads, and history.</p>
+                </div>
+                <button 
+                  onClick={handleReset}
+                  disabled={resetting}
+                  className="px-4 py-2 text-xs font-bold bg-error text-white rounded-lg hover:bg-red-700 shadow-md cursor-pointer flex items-center gap-1.5 transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">delete_forever</span>
+                  <span>Reset Database</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Schedule Meeting Modal */}
-      {selectedLeadForMeeting && (
-        <div className="drawer-backdrop" style={{ zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setSelectedLeadForMeeting(null)}>
-          <div className="glass-card" style={{ width: "90%", maxWidth: "450px", padding: "1.5rem", background: "#ffffff", border: "1px solid var(--border-color)", zIndex: 10001 }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.15rem", color: "var(--primary)", fontWeight: "800", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              📅 Schedule MOU Discussion
-            </h3>
-            
-            <form onSubmit={handleScheduleMeetingSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
-                <strong style={{ fontSize: "0.8rem", color: "#000000" }}>Incubator Name</strong>
-                <div style={{ fontWeight: "700", color: "#000000" }}>{selectedLeadForMeeting.incubator_name}</div>
-                <div style={{ fontSize: "0.85rem", color: "#000000" }}>{selectedLeadForMeeting.email}</div>
+      {activeTab === "console" && (
+        <div className="grid grid-cols-12 gap-8">
+          {/* Console Log Terminal (8 columns) */}
+          <div className="col-span-12 lg:col-span-8 flex flex-col h-[450px]">
+            <div className="bg-[#0b0f19] border border-outline-variant/80 rounded-xl p-5 flex flex-col h-full shadow-lg font-mono">
+              <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
+                  <span className="text-xs font-bold text-primary tracking-widest uppercase">System Console Log</span>
+                </div>
+                <span className="text-[10px] text-white/40">STDOUT_STREAM</span>
               </div>
+              
+              <div className="flex-1 overflow-y-auto space-y-2 text-xs text-sky-400 custom-scrollbar pr-2">
+                {terminalLogs.map((log, idx) => (
+                  <div key={idx} className="flex gap-3 leading-relaxed">
+                    <span className="text-white/30 text-[10px] select-none">[{log.time}]</span>
+                    <span className="text-white/50 select-none">[{log.src}]</span>
+                    <span className="text-sky-300 break-all">{log.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-              <div className="form-group">
-                <label style={{ fontWeight: "700", color: "#000000", fontSize: "0.8rem", marginBottom: "0.25rem", display: "block" }}>Select Meeting Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={meetingDate} 
-                  onChange={(e) => setMeetingDate(e.target.value)} 
-                  required 
-                  style={{ color: "#000000", background: "#f8fafc", width: "100%", padding: "0.5rem" }}
-                />
+          {/* Calendar Synced Events (4 columns) */}
+          <div className="col-span-12 lg:col-span-4 flex flex-col h-[450px]">
+            <div className="bento-card rounded-xl overflow-hidden shadow-sm flex flex-col h-full">
+              <div className="p-5 bg-surface-container-low border-b border-outline-variant flex items-center justify-between">
+                <h4 className="font-title-lg text-title-lg">Calendar Events</h4>
+                <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                  {externalEvents.length} Synced
+                </span>
               </div>
-
-              <div className="form-group">
-                <label style={{ fontWeight: "700", color: "#000000", fontSize: "0.8rem", marginBottom: "0.25rem", display: "block" }}>Select Meeting Time</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="e.g. 11:00 AM or 15:30" 
-                  value={meetingTime} 
-                  onChange={(e) => setMeetingTime(e.target.value)} 
-                  required 
-                  style={{ color: "#000000", background: "#f8fafc", width: "100%", padding: "0.5rem" }}
-                />
+              
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 divide-y divide-outline-variant/20 custom-scrollbar">
+                {externalEvents.map((evt, idx) => (
+                  <div key={evt.id || idx} className="p-3 pt-4 first:pt-3 hover:bg-surface-container-low rounded-lg transition-all flex items-start gap-4">
+                    <div className="flex-shrink-0 text-center border-r border-outline-variant pr-3 min-w-[50px]">
+                      <p className="text-[10px] font-bold text-primary uppercase">{evt.start?.dateTime ? new Date(evt.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "ALL DAY"}</p>
+                      <p className="text-[9px] font-semibold text-outline uppercase">{evt.start?.dateTime ? new Date(evt.start.dateTime).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "Event"}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h5 className="text-[13px] font-bold text-on-surface leading-tight mb-1 truncate">{evt.summary || "Calendar Event"}</h5>
+                      <p className="text-[11px] text-on-surface-variant truncate">
+                        {evt.location || "Google Meet Video Call"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {externalEvents.length === 0 && (
+                  <div className="p-12 text-center text-outline italic text-xs">
+                    No connected Google Calendar events found. Connect calendar in controls.
+                  </div>
+                )}
               </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={() => setSelectedLeadForMeeting(null)}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="btn btn-primary"
-                  disabled={schedulingMeeting}
-                  style={{ background: "var(--accent-green)", border: "1px solid var(--accent-green)", color: "#000000", fontWeight: "600" }}
-                >
-                  {schedulingMeeting ? "Scheduling..." : "Schedule & Send Invite"}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
