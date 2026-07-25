@@ -182,13 +182,29 @@ def parse_where_clause(where_str, where_params):
                     filter_doc["$or"] = []
                 filter_doc["$or"].extend(or_filters)
         else:
-            part_placeholder_count = clause.count("?")
-            part_params = where_params[param_idx : param_idx + part_placeholder_count]
-            param_idx += part_placeholder_count
-            
-            sub_filter = parse_simple_condition(clause, part_params)
-            if sub_filter:
-                filter_doc.update(sub_filter)
+            if " OR " in clause.upper():
+                or_parts = re.split(r"\s+OR\s+", clause, flags=re.IGNORECASE)
+                or_filters = []
+                for part in or_parts:
+                    part_placeholder_count = part.count("?")
+                    part_params = where_params[param_idx : param_idx + part_placeholder_count]
+                    param_idx += part_placeholder_count
+                    
+                    sub_filter = parse_simple_condition(part, part_params)
+                    if sub_filter:
+                        or_filters.append(sub_filter)
+                if or_filters:
+                    if "$or" not in filter_doc:
+                        filter_doc["$or"] = []
+                    filter_doc["$or"].extend(or_filters)
+            else:
+                part_placeholder_count = clause.count("?")
+                part_params = where_params[param_idx : param_idx + part_placeholder_count]
+                param_idx += part_placeholder_count
+                
+                sub_filter = parse_simple_condition(clause, part_params)
+                if sub_filter:
+                    filter_doc.update(sub_filter)
                 
     return filter_doc
 
@@ -333,15 +349,35 @@ class MongoCursor:
                 set_params = params[:set_placeholder_count]
                 where_params = params[set_placeholder_count:]
                 
-                set_clauses = [s.strip() for s in set_str.split(",")]
+                # Split by comma but respect parentheses
+                set_clauses = []
+                current_clause = []
+                paren_depth = 0
+                for char in set_str:
+                    if char == '(':
+                        paren_depth += 1
+                    elif char == ')':
+                        paren_depth -= 1
+                    
+                    if char == ',' and paren_depth == 0:
+                        set_clauses.append("".join(current_clause).strip())
+                        current_clause = []
+                    else:
+                        current_clause.append(char)
+                if current_clause:
+                    set_clauses.append("".join(current_clause).strip())
+
                 update_doc = {}
+                inc_doc = {}
                 param_idx = 0
                 for clause in set_clauses:
                     if "=" in clause:
                         k, v = clause.split("=", 1)
                         k = k.strip()
                         v = v.strip()
-                        if v == "?":
+                        if "coalesce(" in v.lower() and "+ 1" in v.lower():
+                            inc_doc[k] = 1
+                        elif v == "?":
                             val = set_params[param_idx]
                             if k in ["incubation_programs", "acceleration_programs", "lab_facilities", "focus_areas", "founders", "expertise", "investment_stage", "portfolio_startups"] and isinstance(val, str) and (val.startswith("[") or val.startswith("{")):
                                 try:
@@ -354,7 +390,13 @@ class MongoCursor:
                             update_doc[k] = v.strip("'").strip('"')
                             
                 filter_doc = parse_where_clause(where_str, where_params)
-                self.db[table_name].update_many(filter_doc, {"$set": update_doc})
+                update_op = {}
+                if update_doc:
+                    update_op["$set"] = update_doc
+                if inc_doc:
+                    update_op["$inc"] = inc_doc
+                if update_op:
+                    self.db[table_name].update_many(filter_doc, update_op)
             self.results = []
             self.current_idx = 0
             self.rowcount = 1
@@ -570,3 +612,5 @@ def clear_all_tables():
     cursor.execute("DELETE FROM scheduled_meetings")
 
 init_db()
+
+

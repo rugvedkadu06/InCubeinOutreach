@@ -747,7 +747,52 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       setActiveWorkflowNode(0);
     }
   };
- 
+
+  const handleMassSend = async () => {
+    const draftLeads = filteredLeads.filter(l => l.status === "Draft");
+    if (draftLeads.length === 0) {
+      toast.warning(`No draft leads available to send in this campaign.`);
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to mass send invites to all ${draftLeads.length} draft ${targetType === "startups" ? "startups" : "incubators"}?`)) {
+      return;
+    }
+
+    addLog("OUTREACH", `Initializing mass dispatch for ${draftLeads.length} draft leads...`);
+    
+    let payload = {
+      target_type: targetType
+    };
+
+    if (targetType === "startups") {
+      const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
+      payload.subject = template.subject;
+      payload.body = template.body;
+    }
+
+    try {
+      const res = await fetch("/api/outreach/mass-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.status === "success") {
+        addLog("OUTREACH", `Mass dispatch complete. ${data.message}`);
+        toast.success(data.message);
+        await fetchData();
+      } else {
+        addLog("ERROR", `Mass send failed: ${data.detail || "Server error"}`);
+        toast.error(`Mass send failed: ${data.detail || "Server error"}`);
+      }
+    } catch (err) {
+      addLog("ERROR", "Connection to backend mass-send API failed.");
+      toast.error("Connection to backend mass-send API failed.");
+    }
+  };
+
   const handleSendFollowup = async (leadId, leadName, leadEmail) => {
     addLog("OUTREACH", `Triggering outreach partnership follow-up email to ${leadName} (${leadEmail})...`);
     
@@ -1162,24 +1207,6 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
           <Calendar size={14} style={{ marginRight: "6px" }} />
           Scheduled Meetings ({filteredMeetings.length})
         </button>
-        {targetType === "incubators" && (
-          <button 
-            className="btn" 
-            style={{ 
-              background: activeSubTab === "discover" ? "var(--primary-light)" : "transparent",
-              color: activeSubTab === "discover" ? "var(--primary)" : "var(--text-muted)",
-              borderColor: activeSubTab === "discover" ? "var(--primary)" : "transparent",
-              fontWeight: activeSubTab === "discover" ? "700" : "500",
-              padding: "8px 16px",
-              fontSize: "0.85rem",
-              border: "1px solid transparent"
-            }}
-            onClick={() => setActiveSubTab("discover")}
-          >
-            <Building2 size={14} style={{ marginRight: "6px" }} />
-            Discover Leads
-          </button>
-        )}
       </div>
 
       {activeSubTab === "campaigns" && (
@@ -1248,6 +1275,27 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                   <Send size={14} className={checkingFollowups ? "spin" : ""} />
                   <span>{checkingFollowups ? "Sending Followups..." : "Trigger Followups"}</span>
                 </button>
+
+                {filteredLeads.filter(l => l.status === "Draft").length > 0 && (
+                  <button 
+                    className="btn btn-primary"
+                    style={{ 
+                      display: "inline-flex", 
+                      alignItems: "center", 
+                      gap: "0.35rem", 
+                      padding: "0.4rem 0.75rem", 
+                      fontSize: "0.8rem", 
+                      height: "32px", 
+                      background: "rgba(16, 185, 129, 0.9)", 
+                      border: "1px solid rgb(16, 185, 129)" 
+                    }}
+                    onClick={handleMassSend}
+                  >
+                    <Send size={14} />
+                    <span>Mass Send Drafts ({filteredLeads.filter(l => l.status === "Draft").length})</span>
+                  </button>
+                )}
+
                 <button 
                   className="btn btn-secondary" 
                   style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.75rem", fontSize: "0.8rem", height: "32px" }}
@@ -2068,152 +2116,6 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
         </div>
       )}
 
-      {activeSubTab === "discover" && (
-        <div className="animate-in">
-          {/* Directory Lead Finder Card */}
-          <div className="glass-card" style={{ padding: "1.5rem" }}>
-            <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              🏫 Discover & Add Campaign Leads from Directory
-            </h3>
-            <p style={{ margin: "0 0 1.25rem 0", fontSize: "0.8rem", color: "var(--text-dim)" }}>
-              Search through all academic, government, and private incubators. Filter by confidence score rating stars and add them to your targeted campaigns list.
-            </p>
-
-            {/* Filters Panel */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1rem", background: "rgba(255, 255, 255, 0.01)", padding: "0.75rem", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
-              <input 
-                type="text"
-                className="form-input"
-                placeholder="Search by name, description..."
-                value={dirSearchQuery}
-                onChange={(e) => setDirSearchQuery(e.target.value)}
-                style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-              />
-              <select 
-                className="form-input"
-                value={dirSelectedRegion}
-                onChange={(e) => setDirSelectedRegion(e.target.value)}
-                style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-              >
-                <option value="">All Regions</option>
-                {regionsList.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <select 
-                className="form-input"
-                value={dirSelectedState}
-                onChange={(e) => setDirSelectedState(e.target.value)}
-                style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-              >
-                <option value="">All States</option>
-                {statesList.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <select 
-                className="form-input"
-                value={dirSelectedSector}
-                onChange={(e) => setDirSelectedSector(e.target.value)}
-                style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-              >
-                <option value="">All Sectors</option>
-                {sectorsList.map(sec => <option key={sec} value={sec}>{sec}</option>)}
-              </select>
-              <select 
-                className="form-input"
-                value={dirMinStars}
-                onChange={(e) => setDirMinStars(parseInt(e.target.value))}
-                style={{ fontSize: "0.8rem", padding: "0.4rem 0.6rem", color: "black", background: "#f8fafc" }}
-              >
-                <option value={0}>Any Star Rating</option>
-                <option value={5}>⭐⭐⭐⭐⭐ (5 Stars)</option>
-                <option value={4}>⭐⭐⭐⭐ & above (4+ Stars)</option>
-                <option value={3}>⭐⭐⭐ & above (3+ Stars)</option>
-                <option value={2}>⭐⭐ & above (2+ Stars)</option>
-                <option value={1}>⭐ & above (1+ Star)</option>
-              </select>
-            </div>
-
-            {/* Table List of Incubators (5 per page) */}
-            {paginatedDirIncubators.length === 0 ? (
-              <div style={{ padding: "1.5rem 1rem", textAlign: "center", border: "1px dashed var(--border-color)", borderRadius: "6px", color: "var(--text-dim)", fontSize: "0.85rem" }}>
-                No matching incubators found. Try adjusting your search query or filters.
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left", marginBottom: "1rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                      <th style={{ padding: "0.5rem", color: "var(--text-dim)" }}>Incubator</th>
-                      <th style={{ padding: "0.5rem", color: "var(--text-dim)" }}>Region & State</th>
-                      <th style={{ padding: "0.5rem", color: "var(--text-dim)", textAlign: "center" }}>Confidence Star</th>
-                      <th style={{ padding: "0.5rem", color: "var(--text-dim)", textAlign: "right" }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedDirIncubators.map(inc => {
-                      const isAlreadyLead = leads.some(lead => lead.incubator_id === inc.id);
-                      return (
-                        <tr key={inc.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", verticalAlign: "middle" }}>
-                          <td style={{ padding: "0.5rem" }}>
-                            <div style={{ fontWeight: "600", color: "#000000" }}>{inc.name}</div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{inc.email || "No email available"}</div>
-                          </td>
-                          <td style={{ padding: "0.5rem" }}>{inc.city ? `${inc.city}, ` : ""}{inc.state}</td>
-                          <td style={{ padding: "0.5rem", textAlign: "center" }}>{"⭐".repeat(Math.round(inc.confidence_score * 5))}</td>
-                          <td style={{ padding: "0.5rem", textAlign: "right" }}>
-                            <button 
-                              className="btn" 
-                              style={{ 
-                                fontSize: "0.75rem", 
-                                padding: "0.25rem 0.5rem", 
-                                background: isAlreadyLead ? "rgba(16,185,129,0.1)" : "var(--primary-light)",
-                                color: isAlreadyLead ? "var(--accent-green)" : "var(--primary)",
-                                borderColor: isAlreadyLead ? "rgba(16,185,129,0.2)" : "rgba(0,106,99,0.2)",
-                                fontWeight: "700" 
-                              }}
-                              onClick={() => !isAlreadyLead && handleAddLead(inc)}
-                              disabled={isAlreadyLead || addingLeadId === inc.id}
-                            >
-                              {isAlreadyLead ? "Already in Leads" : addingLeadId === inc.id ? "Adding..." : "Add to Leads"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Pagination Controls */}
-                {filteredIncubatorsFromDir.length > itemsPerPage && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-color)", paddingTop: "0.5rem" }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                      Showing page <strong style={{ color: "black" }}>{dirCurrentPage}</strong> of <strong style={{ color: "black" }}>{totalPages}</strong> ({filteredIncubatorsFromDir.length} total incubators)
-                    </span>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                        onClick={() => setDirCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={dirCurrentPage === 1}
-                      >
-                        Previous
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                        onClick={() => setDirCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={dirCurrentPage === totalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* View Result / Detail Drawer Modal */}
       {selectedLeadForDetail && (

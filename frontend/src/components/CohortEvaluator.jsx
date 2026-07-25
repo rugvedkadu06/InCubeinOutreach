@@ -547,6 +547,19 @@ export default function CohortEvaluator() {
                               {app.stage}
                             </span>
                           </td>
+                          <td style={{ padding: "14px 16px" }} onClick={() => setSelectedApp(app)}>
+                            <span style={{
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              background: (app.priority || "Medium") === "High" ? "#fee2e2" : (app.priority || "Medium") === "Medium" ? "#fef3c7" : "#f3f4f6",
+                              color: (app.priority || "Medium") === "High" ? "#991b1b" : (app.priority || "Medium") === "Medium" ? "#92400e" : "#374151",
+                              border: `1px solid ${(app.priority || "Medium") === "High" ? "#fca5a5" : (app.priority || "Medium") === "Medium" ? "#fcd34d" : "#e5e7eb"}`
+                            }}>
+                              {app.priority || "Medium"}
+                            </span>
+                          </td>
                           <td style={{ padding: "14px 16px", textAlign: "center" }} onClick={() => setSelectedApp(app)}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                               <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
@@ -564,7 +577,7 @@ export default function CohortEvaluator() {
                     })}
                     {filteredApps.length === 0 && (
                       <tr>
-                        <td colSpan={6} style={{ padding: "30px", textAlign: "center", fontSize: "0.85rem", color: "var(--text-dim)" }}>
+                        <td colSpan={7} style={{ padding: "30px", textAlign: "center", fontSize: "0.85rem", color: "var(--text-dim)" }}>
                           No applications matched the filter criteria.
                         </td>
                       </tr>
@@ -622,6 +635,17 @@ export default function CohortEvaluator() {
                   </span>
                   <span style={{ fontSize: "0.74rem", background: "var(--bg-dark)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-primary)" }}>
                     Stage: {selectedApp.stage}
+                  </span>
+                  <span style={{
+                    fontSize: "0.74rem",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontWeight: 700,
+                    background: (selectedApp.priority || "Medium") === "High" ? "#fee2e2" : (selectedApp.priority || "Medium") === "Medium" ? "#fef3c7" : "#f3f4f6",
+                    color: (selectedApp.priority || "Medium") === "High" ? "#991b1b" : (selectedApp.priority || "Medium") === "Medium" ? "#92400e" : "#374151",
+                    border: `1px solid ${(selectedApp.priority || "Medium") === "High" ? "#fca5a5" : (selectedApp.priority || "Medium") === "Medium" ? "#fcd34d" : "#e5e7eb"}`
+                  }}>
+                    Priority: {selectedApp.priority || "Medium"}
                   </span>
                   {selectedApp.dpiit && (
                     <span style={{ fontSize: "0.74rem", background: "var(--primary-light)", padding: "4px 8px", borderRadius: "4px", color: "var(--primary)", fontWeight: 700 }}>
@@ -686,6 +710,37 @@ export default function CohortEvaluator() {
                   <div style={{ fontSize: "0.7rem", color: "var(--primary)", textTransform: "uppercase", fontWeight: 700 }}>Final Score</div>
                   <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "var(--primary)", margin: "4px 0" }}>{selectedApp.final_score}</div>
                   <div style={{ fontSize: "0.68rem", color: "var(--primary)" }}>Rank: #{selectedApp.rank}</div>
+                </div>
+              </div>
+
+              {/* Manual Priority Setting */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg-dark)", padding: "10px 14px", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-color)" }}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>Evaluation Priority:</span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {["Low", "Medium", "High"].map((p) => {
+                    const isActive = (selectedApp.priority || "Medium") === p;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => handleUpdatePriority(selectedApp._id, p)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          border: "1px solid var(--border-color)",
+                          background: isActive 
+                            ? (p === "High" ? "#ef4444" : p === "Medium" ? "#f59e0b" : "#6b7280") 
+                            : "white",
+                          color: isActive ? "white" : "var(--text-muted)",
+                          transition: "all 0.2s ease"
+                        }}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

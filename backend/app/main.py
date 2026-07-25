@@ -12,7 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 
-from .database import get_db_connection, get_pipeline_logs, log_pipeline_step, clear_all_tables
+from .database import (
+    get_db_connection, get_pipeline_logs, log_pipeline_step, clear_all_tables, get_mongo_db
+)
 from .scraper import run_scraper_pipeline
 from .cleaner import run_cleaner_pipeline
 from .resolution import run_resolution_pipeline
@@ -1344,8 +1346,13 @@ def add_outreach_lead(req: AddLeadRequest):
     cursor = conn.cursor()
     
     # Check if already exists in campaign
-    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE incubator_id = ? OR email = ?", (req.incubator_id, req.email))
-    if cursor.fetchone()[0] > 0:
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE incubator_id = ?", (req.incubator_id,))
+    id_exists = cursor.fetchone()[0] > 0
+    
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE email = ?", (req.email,))
+    email_exists = cursor.fetchone()[0] > 0
+    
+    if id_exists or email_exists:
         conn.close()
         return {"status": "exists", "message": "Lead already exists in campaign leads."}
         
@@ -1566,6 +1573,106 @@ Incubein Foundation Admin
     conn.close()
     
     return email_sent_successfully
+
+
+class MassSendRequest(BaseModel):
+    target_type: str
+    subject: Optional[str] = None
+    body: Optional[str] = None
+
+@app.post("/api/outreach/mass-send")
+def trigger_mass_send(req: MassSendRequest):
+    from datetime import datetime
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Select all Draft leads of the target type
+    if req.target_type == "startups":
+        cursor.execute("SELECT * FROM outreach_leads WHERE status = 'Draft' AND incubator_id = 'incubein_cohort'")
+    else:
+        cursor.execute("SELECT * FROM outreach_leads WHERE status = 'Draft' AND incubator_id != 'incubein_cohort'")
+        
+    leads = [dict(row) for row in cursor.fetchall()]
+    
+    if not leads:
+        conn.close()
+        return {"status": "success", "message": f"No draft leads found for {req.target_type}.", "sent_count": 0}
+        
+    # Get SMTP configuration
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = os.environ.get("SMTP_PORT", "587")
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@incubein.com"
+    is_smtp_ready = smtp_host and smtp_user and smtp_pass and "your_email" not in smtp_user
+    
+    sent_count = 0
+    simulated_count = 0
+    
+    for lead in leads:
+        # Determine subject and body (with template interpolation if it's startups)
+        subject_to_send = req.subject
+        body_to_send = req.body
+        
+        # If subject/body is not provided, use default
+        if req.target_type == "startups" and not subject_to_send:
+            # Predefined default template for startups
+            subject_to_send = f"INCUBEIN Cohort: Incubation Seat Offer - {lead['incubator_name']}"
+            body_to_send = f"Dear Founder,\n\nWe are pleased to inform you that {lead['incubator_name']} has been selected for incubation in the INCUBEIN Startup Cohort!\n\nOur evaluation committee was highly impressed by your application. We will follow up shortly with formal onboarding details.\n\nBest regards,\nINCUBEIN Foundation Team"
+        elif not subject_to_send:
+            subject_to_send = f"Academic Partnership Opportunity - Incubein Innovation Ecosystem"
+            body_to_send = f"Dear Representative,\n\nWe hope this email finds you well. \n\nWe are reaching out from the Incubein Foundation regarding a potential Strategic Cooperation and Academic Collaboration. We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.\n\nPlease reply to this email to confirm your interest and schedule an introductory virtual meeting.\n\nSincerely,\nIncubein Foundation Admin"
+            
+        # Interpolate startup name if present
+        if req.target_type == "startups" and body_to_send:
+            body_to_send = body_to_send.replace("{StartupName}", lead["incubator_name"])
+            subject_to_send = subject_to_send.replace("{StartupName}", lead["incubator_name"])
+            
+        email_sent = False
+        if is_smtp_ready:
+            try:
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = subject_to_send
+                msg["From"] = sender_email
+                msg["To"] = lead["email"]
+                msg.attach(MIMEText(body_to_send, "plain"))
+                
+                port = int(smtp_port)
+                if port == 465:
+                    server = smtplib.SMTP_SSL(smtp_host, port, timeout=10)
+                else:
+                    server = smtplib.SMTP(smtp_host, port, timeout=10)
+                    server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(sender_email, [lead["email"]], msg.as_string())
+                server.quit()
+                email_sent = True
+                sent_count += 1
+            except Exception as e:
+                print(f"Error sending mass email to {lead['email']}: {e}")
+                simulated_count += 1
+        else:
+            simulated_count += 1
+            
+        # Update lead in DB
+        cursor.execute(
+            "UPDATE outreach_leads SET status = 'Sent', sent_at = ?, contact_count = coalesce(contact_count, 0) + 1, last_contact_reason = ? WHERE id = ?",
+            (datetime.now().isoformat(), subject_to_send or "Mass Outreach Email", lead["id"])
+        )
+        
+    conn.commit()
+    conn.close()
+    
+    return {
+        "status": "success", 
+        "sent_count": sent_count,
+        "simulated_count": simulated_count,
+        "message": f"Successfully processed mass send for {len(leads)} {req.target_type} ({sent_count} real emails, {simulated_count} simulated)."
+    }
 
 class FollowupEmailRequest(BaseModel):
     lead_id: str
@@ -2827,6 +2934,15 @@ async def upload_cohort_excel(file: UploadFile = File(...)):
             
             # Calculate final score (100% based on rule engine score)
             startup_data["final_score"] = round(rule_score, 1)
+            
+            # Calculate default priority based on rule score
+            if rule_score >= 70:
+                priority_val = "High"
+            elif rule_score >= 40:
+                priority_val = "Medium"
+            else:
+                priority_val = "Low"
+            startup_data["priority"] = priority_val
 
 
             
@@ -2897,6 +3013,30 @@ def delete_incubein_applications():
         db = get_mongo_db()
         db["incubein_applications"].delete_many({})
         return {"status": "success", "message": "All startup applications cleared successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class UpdatePriorityRequest(BaseModel):
+    app_id: str
+    priority: str
+
+@app.post("/api/incubein/applications/priority")
+def update_application_priority(req: UpdatePriorityRequest):
+    try:
+        db = get_mongo_db()
+        from bson import ObjectId
+        if req.priority not in ["High", "Medium", "Low"]:
+            raise HTTPException(status_code=400, detail="Invalid priority value. Must be High, Medium, or Low.")
+            
+        result = db["incubein_applications"].update_one(
+            {"_id": ObjectId(req.app_id)},
+            {"$set": {"priority": req.priority}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Application not found.")
+            
+        return {"status": "success", "message": f"Successfully updated priority to {req.priority}."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -3063,6 +3203,8 @@ def clear_startups_directory():
         return {"status": "success", "message": f"Successfully cleared {res.deleted_count} startups from the directory."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 
