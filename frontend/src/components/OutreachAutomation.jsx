@@ -74,20 +74,179 @@ IN WITNESS WHEREOF, the Parties hereto have signed and executed this Memorandum 
 
 
 const PREDEFINED_TEMPLATES = {
-  incubation: {
-    name: "Incubation Seat Offer",
-    subject: "INCUBEIN Cohort: Incubation Seat Offer - {StartupName}",
-    body: "Dear Founder,\n\nWe are pleased to inform you that {StartupName} has been selected for incubation in the INCUBEIN Startup Cohort!\n\nOur evaluation committee was highly impressed by your application. We will follow up shortly with formal onboarding details.\n\nBest regards,\nINCUBEIN Foundation Team"
+  startup_meeting: {
+    target: "startups",
+    name: "Invite Mail",
+    subject: "Introduction to Incubein Foundation",
+    body: `Hello {StartupName},
+
+Greetings from Incubein Foundation RTM Nagpur University.
+
+We came across your startup and were impressed by the work you're building. At **Incubein Foundation**, we work closely with early-stage and growth-stage startups by providing the right ecosystem, mentorship, and resources to help them scale.
+
+We support startups through:
+
+* Incubation and acceleration programs
+* One-on-one mentoring from industry experts
+* Investor and funding readiness support
+* Business strategy and market access guidance
+* Technical and product development support
+* Networking opportunities with founders, corporates, and ecosystem partners
+* Access to startup credits, infrastructure, and other ecosystem benefits
+
+We would love to learn more about {StartupName}, understand your current challenges and growth plans, and explore how Incubein Foundation can support your journey.
+
+If you're available, we'd be happy to schedule a **30-minute Google Meet** at your convenience. Alternatively, you're most welcome to visit our office for an in-person discussion.
+
+Please let us know a suitable date and time that works for you, and we'll be happy to coordinate.
+
+We look forward to connecting with you and exploring opportunities to work together.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
   },
-  deck_request: {
-    name: "Pitch Deck Request",
-    subject: "INCUBEIN Cohort: Pitch Deck Request - {StartupName}",
-    body: "Dear Founder,\n\nThank you for applying to the INCUBEIN Startup Program.\n\nWe have completed our initial screening. To assist in our final ranking, please reply with your latest presentation deck and financial roadmap.\n\nBest regards,\nINCUBEIN Foundation Team"
+  startup_followup_confirm: {
+    target: "startups",
+    name: "If positive response (Meet Confirm)",
+    subject: "Google Meet Confirmation – Incubein Foundation",
+    body: `Dear {StartupName},
+
+Thank you for your response. We appreciate your interest in connecting with **Incubein Foundation – RTMNU Business Incubation Centre**.
+
+We're pleased to confirm our **30-minute Google Meet** as per the following schedule:
+
+**Date:** [Date]
+**Time:** [Time] (IST)
+**Google Meet Link:** [Insert Google Meet Link]
+
+During the meeting, we'd love to learn more about {StartupName}, understand your current goals and challenges, and discuss how Incubein Foundation can support your journey through incubation, mentorship, funding readiness, strategic guidance, and our startup ecosystem.
+
+If you have any documents, a pitch deck, or specific discussion points you'd like to share, please feel free to keep them handy for the meeting.
+
+If you need to reschedule, kindly let us know in advance, and we'll be happy to coordinate another suitable time.
+
+We look forward to speaking with you.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
   },
-  interview: {
-    name: "Selection Interview Invite",
-    subject: "INCUBEIN Cohort: Selection Interview - {StartupName}",
-    body: "Dear Founder,\n\nCongratulations! {StartupName} has shortlisted for the final interview phase of the INCUBEIN Cohort.\n\nPlease select a convenient slot to schedule a 15-minute pitch session with our selection committee.\n\nBest regards,\nINCUBEIN Foundation Team"
+  startup_followup_decline: {
+    target: "startups",
+    name: "If declined",
+    subject: "Thank You for Your Response",
+    body: `Dear {StartupName},
+
+Thank you for your response and for considering our invitation.
+
+We completely understand and appreciate you taking the time to get back to us. While we're unable to connect at this time, we'd be happy to stay in touch and explore opportunities to collaborate in the future as your startup grows.
+
+If your requirements change or if you'd like to learn more about our incubation programs, mentorship, funding support, or other ecosystem offerings, please feel free to reach out. We'd be delighted to connect whenever the timing is right.
+
+We wish you and your team continued success and all the very best for your startup journey.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
+  },
+  incubator_meeting: {
+    target: "incubators",
+    name: "Invite Mail",
+    subject: "Introduction to Incubein Foundation",
+    body: `Hello {IncubatorName},
+
+Greetings from Incubein Foundation RTM Nagpur University.
+
+We came across your incubation centre and were impressed by the impactful work you're doing for the startup ecosystem. At **Incubein Foundation**, we actively collaborate with incubation centres, academic institutions, and innovation hubs to build a stronger and more connected ecosystem.
+
+We would love to explore a potential **Strategic Cooperation and Academic Collaboration** between Incubein Foundation and {IncubatorName}. Together, we can:
+
+* Co-host startup programs and events
+* Exchange knowledge, mentors, and resources
+* Collaborate on funding and policy advocacy
+* Expand our collective reach across regions and sectors
+* Sign a formal MoU to institutionalise our partnership
+
+We would love to learn more about {IncubatorName}, understand your ongoing programs, and explore how we can create mutual value.
+
+If you're available, we'd be happy to schedule a **30-minute Google Meet** at your convenience. Alternatively, you're most welcome to visit our office for an in-person discussion.
+
+Please let us know a suitable date and time that works for you, and we'll be happy to coordinate.
+
+We look forward to connecting with you and exploring opportunities to work together.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
+  },
+  incubator_followup_confirm: {
+    target: "incubators",
+    name: "If positive response (Meet Confirm)",
+    subject: "Google Meet Confirmation – Incubein Foundation",
+    body: `Dear {IncubatorName},
+
+Thank you for your response. We appreciate your interest in connecting with **Incubein Foundation – RTMNU Business Incubation Centre**.
+
+We're pleased to confirm our **30-minute Google Meet** as per the following schedule:
+
+**Date:** [Date]
+**Time:** [Time] (IST)
+**Google Meet Link:** [Insert Google Meet Link]
+
+During the meeting, we'd love to learn more about {IncubatorName}, understand your current programs and goals, and discuss how Incubein Foundation can collaborate with you through academic partnerships, co-incubation, MoU agreements, and shared ecosystem initiatives.
+
+If you have any documents, a brochure, or specific discussion points you'd like to share, please feel free to keep them handy for the meeting.
+
+If you need to reschedule, kindly let us know in advance, and we'll be happy to coordinate another suitable time.
+
+We look forward to speaking with you.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
+  },
+  incubator_followup_decline: {
+    target: "incubators",
+    name: "If declined",
+    subject: "Thank You for Your Response",
+    body: `Dear {IncubatorName},
+
+Thank you for your response and for considering our invitation.
+
+We completely understand and appreciate you taking the time to get back to us. While we're unable to connect at this time, we'd be happy to stay in touch and explore opportunities to collaborate in the future.
+
+If your requirements change or if you'd like to learn more about our partnership programs, MoU frameworks, or joint incubation initiatives, please feel free to reach out. We'd be delighted to connect whenever the timing is right.
+
+We wish you and your team continued success in your mission to support the startup ecosystem.
+
+Warm regards,
+
+**Team Incubein Foundation**
+Incubein Foundation – RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com`
   }
 };
 
@@ -101,7 +260,16 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       setTargetType(defaultTargetType);
     }
   }, [defaultTargetType]);
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState("incubation");
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("startup_meeting");
+
+  useEffect(() => {
+    if (!PREDEFINED_TEMPLATES[selectedTemplateKey] || PREDEFINED_TEMPLATES[selectedTemplateKey].target !== targetType) {
+      const firstValid = Object.entries(PREDEFINED_TEMPLATES).find(([k, v]) => v.target === targetType);
+      if (firstValid) {
+        setSelectedTemplateKey(firstValid[0]);
+      }
+    }
+  }, [targetType, selectedTemplateKey]);
 
   const [meetings, setMeetings] = useState([]);
   const [incubators, setIncubators] = useState([]);
@@ -715,10 +883,15 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
     
     let payload = { lead_id: leadId };
     
-    if (targetType === "startups") {
-      const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
-      const compiledSubject = template.subject.replace(/{StartupName}/g, leadName);
-      const compiledBody = template.body.replace(/{StartupName}/g, leadName);
+    
+    const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
+    if (template) {
+      const compiledSubject = template.subject
+        .replace(/{StartupName}/g, leadName)
+        .replace(/{IncubatorName}/g, leadName);
+      const compiledBody = template.body
+        .replace(/{StartupName}/g, leadName)
+        .replace(/{IncubatorName}/g, leadName);
       payload = {
         lead_id: leadId,
         subject: compiledSubject,
@@ -765,8 +938,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       target_type: targetType
     };
 
-    if (targetType === "startups") {
-      const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
+    const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
+    if (template) {
       payload.subject = template.subject;
       payload.body = template.body;
     }
@@ -1223,6 +1396,21 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                 </p>
               </div>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#000000", whiteSpace: "nowrap", fontWeight: "600" }}>Template:</span>
+                  <select 
+                    className="form-input" 
+                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", width: "160px", height: "32px", color: "black", background: "#f8fafc", border: "1px solid var(--border-color)", borderRadius: "4px", margin: 0 }}
+                    value={selectedTemplateKey}
+                    onChange={(e) => setSelectedTemplateKey(e.target.value)}
+                  >
+                    {Object.entries(PREDEFINED_TEMPLATES)
+                      .filter(([k, v]) => v.target === targetType)
+                      .map(([k, v]) => (
+                        <option key={k} value={k}>{v.name}</option>
+                      ))}
+                  </select>
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
                   <span style={{ fontSize: "0.8rem", color: "#000000", whiteSpace: "nowrap", fontWeight: "600" }}>Auto Scan:</span>
                   <select 

@@ -1437,22 +1437,54 @@ def trigger_outreach_email(req: OutreachEmailRequest):
             from email.mime.text import MIMEText
             
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = req.subject or f"Academic Partnership Opportunity - Incubein Innovation Ecosystem"
+            msg["Subject"] = req.subject or "Introduction to Incubein Foundation"
             msg["From"] = sender_email
             msg["To"] = lead["email"]
             
-            body_text = req.body or f"""
-Dear Representative,
+            lead_name = lead["incubator_name"]
+            is_startup = lead["incubator_id"] == "incubein_cohort"
+            if is_startup:
+                default_subject = "Introduction to Incubein Foundation"
+                default_body = f"""Hello {lead_name},
 
-We hope this email finds you well. 
+Greetings from Incubein Foundation RTM Nagpur University.
 
-We are reaching out from the Incubein Foundation regarding a potential Strategic Cooperation and Academic Collaboration. We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.
+We came across your startup and were impressed by the work you're building. At Incubein Foundation, we work closely with early-stage and growth-stage startups by providing the right ecosystem, mentorship, and resources to help them scale.
 
-Please reply to this email to confirm your interest and schedule an introductory virtual meeting.
+We would love to learn more about {lead_name}, understand your current challenges and growth plans, and explore how Incubein Foundation can support your journey.
 
-Sincerely,
-Incubein Foundation Admin
-            """
+If you're available, we'd be happy to schedule a 30-minute Google Meet at your convenience.
+
+Please let us know a suitable date and time that works for you, and we'll be happy to coordinate.
+
+Warm regards,
+
+Team Incubein Foundation
+Incubein Foundation - RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com"""
+            else:
+                default_subject = "Introduction to Incubein Foundation"
+                default_body = f"""Hello {lead_name},
+
+Greetings from Incubein Foundation RTM Nagpur University.
+
+We came across your incubation centre and were impressed by the impactful work you're doing for the startup ecosystem. We would love to explore a potential Strategic Cooperation and Academic Collaboration between Incubein Foundation and {lead_name}.
+
+If you're available, we'd be happy to schedule a 30-minute Google Meet at your convenience.
+
+Please let us know a suitable date and time that works for you, and we'll be happy to coordinate.
+
+Warm regards,
+
+Team Incubein Foundation
+Incubein Foundation - RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com"""
+
+            body_text = req.body or default_body
             msg.attach(MIMEText(body_text, "plain"))
             
             port = int(smtp_port)
@@ -1507,33 +1539,45 @@ def send_followup_email(lead_id: str, lead_name: str, lead_email: str, followup_
     conn.close()
 
     if lead_row and lead_row["incubator_id"] == "incubein_cohort":
-        subject = f"Following up: INCUBEIN Cohort - {lead_name} (Follow-up #{followup_number})"
-        body_text = f"""Dear Founder,
+        subject = f"Following up: Introduction to Incubein Foundation – {lead_name} (Follow-up #{followup_number})"
+        body_text = f"""Dear {lead_name},
 
-We hope this email finds you well.
+Greetings from Incubein Foundation RTM Nagpur University.
 
-We are writing to follow up on our previous email regarding your selection/application for the INCUBEIN Startup Cohort. 
+We are following up on our previous email regarding our invitation to explore how Incubein Foundation can support your startup journey.
 
-Please reply to this email to confirm the next steps or schedule a quick call with our onboarding team.
+We remain very interested in connecting with {lead_name} and would love to schedule a 30-minute Google Meet at your convenience.
 
-Best regards,
-INCUBEIN Team
+Please let us know a suitable date and time that works for you, and we'll be happy to coordinate.
+
+Warm regards,
+
+Team Incubein Foundation
+Incubein Foundation - RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com
 (Follow-up Reference #{followup_number})
 """
     else:
-        subject = f"Following up: Academic Partnership Opportunity - Incubein Innovation Ecosystem (Follow-up #{followup_number})"
-        body_text = f"""Dear Representative,
+        subject = f"Following up: Introduction to Incubein Foundation – {lead_name} (Follow-up #{followup_number})"
+        body_text = f"""Dear {lead_name},
 
-We hope this email finds you well. 
+Greetings from Incubein Foundation RTM Nagpur University.
 
-We are writing to follow up on our previous email regarding a potential Strategic Cooperation and Academic Collaboration between the Incubein Foundation and your incubation center.
+We are following up on our previous email regarding a potential Strategic Cooperation and Academic Collaboration between Incubein Foundation and {lead_name}.
 
-We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.
+We remain keen to explore a 30-minute Google Meet at your convenience to discuss how we can create mutual value for our respective ecosystems.
 
-Please reply to this email to confirm your interest and schedule an introductory virtual meeting.
+Please let us know a suitable date and time, and we'll be happy to coordinate.
 
-Sincerely,
-Incubein Foundation Admin
+Warm regards,
+
+Team Incubein Foundation
+Incubein Foundation - RTMNU Business Incubation Centre
+Nagpur, Maharashtra
+Email: teamincubein@gmail.com
+Website: www.incubein.com
 (Follow-up Reference #{followup_number})
 """
     
@@ -1616,17 +1660,17 @@ def trigger_mass_send(req: MassSendRequest):
         
         # If subject/body is not provided, use default
         if req.target_type == "startups" and not subject_to_send:
-            # Predefined default template for startups
-            subject_to_send = f"INCUBEIN Cohort: Incubation Seat Offer - {lead['incubator_name']}"
-            body_to_send = f"Dear Founder,\n\nWe are pleased to inform you that {lead['incubator_name']} has been selected for incubation in the INCUBEIN Startup Cohort!\n\nOur evaluation committee was highly impressed by your application. We will follow up shortly with formal onboarding details.\n\nBest regards,\nINCUBEIN Foundation Team"
+            subject_to_send = f"Introduction to Incubein Foundation"
+            body_to_send = f"Hello {lead['incubator_name']},\n\nGreetings from Incubein Foundation RTM Nagpur University.\n\nWe came across your startup and were impressed by the work you're building. At Incubein Foundation, we work closely with early-stage and growth-stage startups by providing the right ecosystem, mentorship, and resources to help them scale.\n\nWe would love to learn more about {lead['incubator_name']}, understand your current challenges and growth plans, and explore how Incubein Foundation can support your journey.\n\nIf you're available, we'd be happy to schedule a 30-minute Google Meet at your convenience.\n\nPlease let us know a suitable date and time that works for you, and we'll be happy to coordinate.\n\nWarm regards,\n\nTeam Incubein Foundation\nIncubein Foundation - RTMNU Business Incubation Centre\nNagpur, Maharashtra\nEmail: teamincubein@gmail.com\nWebsite: www.incubein.com"
         elif not subject_to_send:
-            subject_to_send = f"Academic Partnership Opportunity - Incubein Innovation Ecosystem"
-            body_to_send = f"Dear Representative,\n\nWe hope this email finds you well. \n\nWe are reaching out from the Incubein Foundation regarding a potential Strategic Cooperation and Academic Collaboration. We would love to share a draft MoU agreement with your incubation center and explore mutually beneficial synergies.\n\nPlease reply to this email to confirm your interest and schedule an introductory virtual meeting.\n\nSincerely,\nIncubein Foundation Admin"
+            subject_to_send = f"Introduction to Incubein Foundation"
+            body_to_send = f"Hello {lead['incubator_name']},\n\nGreetings from Incubein Foundation RTM Nagpur University.\n\nWe came across your incubation centre and were impressed by the impactful work you're doing for the startup ecosystem. We would love to explore a potential Strategic Cooperation and Academic Collaboration between Incubein Foundation and {lead['incubator_name']}.\n\nIf you're available, we'd be happy to schedule a 30-minute Google Meet at your convenience.\n\nPlease let us know a suitable date and time that works for you, and we'll be happy to coordinate.\n\nWarm regards,\n\nTeam Incubein Foundation\nIncubein Foundation - RTMNU Business Incubation Centre\nNagpur, Maharashtra\nEmail: teamincubein@gmail.com\nWebsite: www.incubein.com"
             
-        # Interpolate startup name if present
-        if req.target_type == "startups" and body_to_send:
-            body_to_send = body_to_send.replace("{StartupName}", lead["incubator_name"])
-            subject_to_send = subject_to_send.replace("{StartupName}", lead["incubator_name"])
+        # Interpolate name placeholders if present
+        if body_to_send:
+            body_to_send = body_to_send.replace("{StartupName}", lead["incubator_name"]).replace("{IncubatorName}", lead["incubator_name"])
+        if subject_to_send:
+            subject_to_send = subject_to_send.replace("{StartupName}", lead["incubator_name"]).replace("{IncubatorName}", lead["incubator_name"])
             
         email_sent = False
         if is_smtp_ready:
@@ -2406,12 +2450,12 @@ def send_meeting_invite_email(lead_name: str, lead_email: str, date_str: str, ti
         
     try:
         msg = MIMEMultipart("mixed")
-        msg["Subject"] = f"Invitation: MOU Collaboration Discussion @ {date_str} {time_str}"
-        msg["From"] = f"Incubein Outreach <{sender_email}>"
+        msg["Subject"] = f"Google Meet Confirmation – Incubein Foundation"
+        msg["From"] = f"Team Incubein Foundation <{sender_email}>"
         msg["To"] = lead_email
         
-        summary = f"MOU Collaboration: {lead_name}"
-        description = f"Dear Team at {lead_name},\n\nWe have scheduled a virtual introductory meeting to discuss our Strategic Cooperation and Academic Collaboration MOU.\n\nMeeting link: {meet_link}\n\nWe look forward to meeting you."
+        summary = f"30-Minute Google Meet: Incubein Foundation & {lead_name}"
+        description = f"Dear {lead_name},\n\nThank you for your response. We appreciate your interest in connecting with Incubein Foundation - RTMNU Business Incubation Centre.\n\nWe're pleased to confirm our 30-minute Google Meet as per the following schedule:\n\nDate: {date_str}\nTime: {time_str} (IST)\nGoogle Meet Link: {meet_link}\n\nDuring the meeting, we'd love to learn more about {lead_name}, understand your current goals and challenges, and discuss how Incubein Foundation can support your journey through incubation, mentorship, funding readiness, strategic guidance, and our startup ecosystem.\n\nIf you have any documents, a pitch deck, or specific discussion points you'd like to share, please feel free to keep them handy for the meeting.\n\nIf you need to reschedule, kindly let us know in advance, and we'll be happy to coordinate another suitable time.\n\nWe look forward to speaking with you.\n\nWarm regards,\nTeam Incubein Foundation\nIncubein Foundation - RTMNU Business Incubation Centre\nNagpur, Maharashtra\nEmail: teamincubein@gmail.com\nWebsite: www.incubein.com"
         
         msg_alternative = MIMEMultipart("alternative")
         msg.attach(msg_alternative)
@@ -2421,33 +2465,42 @@ def send_meeting_invite_email(lead_name: str, lead_email: str, date_str: str, ti
         
         body_html = f"""
         <html>
-            <body style="font-family: sans-serif; line-height: 1.5; color: #1e293b;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 1.5rem; border: 1px solid #e2e8f0; border-radius: 8px;">
-                    <h2 style="color: #8b5cf6; margin-top: 0;">MOU Collaboration Partnership Discussion</h2>
-                    <p>Dear Team at <strong>{lead_name}</strong>,</p>
-                    <p>We are pleased to invite you to a virtual meeting to discuss the strategic collaboration MOU between our institutions.</p>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; background: #f8fafc;">
+                <div style="max-width: 600px; margin: 32px auto; padding: 2rem; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <h2 style="color: #7c3aed; margin-top: 0; font-size: 1.3rem;">Google Meet Confirmation – Incubein Foundation</h2>
+                    <p>Dear <strong>{lead_name}</strong>,</p>
+                    <p>Thank you for your response. We appreciate your interest in connecting with <strong>Incubein Foundation – RTMNU Business Incubation Centre</strong>.</p>
+                    <p>We’re pleased to confirm our <strong>30-minute Google Meet</strong> as per the following schedule:</p>
                     
-                    <div style="background: #f8fafc; padding: 1rem; border-radius: 6px; margin: 1.5rem 0;">
+                    <div style="background: #f1f5f9; padding: 1.25rem 1.5rem; border-radius: 8px; margin: 1.5rem 0; border-left: 4px solid #7c3aed;">
                         <table style="width: 100%; border-collapse: collapse;">
                             <tr>
-                                <td style="width: 80px; padding: 4px 0; color: #64748b; font-weight: 600;">Date:</td>
-                                <td style="padding: 4px 0; font-weight: 700;">{date_str}</td>
+                                <td style="width: 120px; padding: 6px 0; color: #64748b; font-weight: 600;">Date:</td>
+                                <td style="padding: 6px 0; font-weight: 700; color: #0f172a;">{date_str}</td>
                             </tr>
                             <tr>
-                                <td style="color: #64748b; font-weight: 600; padding: 4px 0;">Time:</td>
-                                <td style="padding: 4px 0; font-weight: 700;">{time_str}</td>
+                                <td style="color: #64748b; font-weight: 600; padding: 6px 0;">Time:</td>
+                                <td style="padding: 6px 0; font-weight: 700; color: #0f172a;">{time_str} (IST)</td>
                             </tr>
                             <tr>
-                                <td style="color: #64748b; font-weight: 600; padding: 4px 0;">Video Call:</td>
-                                <td style="padding: 4px 0;">
-                                    <a href="{meet_link}" style="color: #06b6d4; text-decoration: none; font-weight: 700;">Join Google Meet</a>
+                                <td style="color: #64748b; font-weight: 600; padding: 6px 0;">Google Meet:</td>
+                                <td style="padding: 6px 0;">
+                                    <a href="{meet_link}" style="color: #7c3aed; text-decoration: none; font-weight: 700;">Join Google Meet →</a>
                                 </td>
                             </tr>
                         </table>
                     </div>
                     
-                    <p>An interactive calendar invite has been attached to this email. You can RSVP directly using your email client's RSVP/buttons.</p>
-                    <p>Sincerely,<br><strong>Incubein Foundation Outreach Team</strong></p>
+                    <p>During the meeting, we’d love to learn more about <strong>{lead_name}</strong>, understand your current goals and challenges, and discuss how Incubein Foundation can support your journey through incubation, mentorship, funding readiness, strategic guidance, and our startup ecosystem.</p>
+                    <p>If you have any documents, a pitch deck, or specific discussion points you’d like to share, please feel free to keep them handy for the meeting.</p>
+                    <p>If you need to reschedule, kindly let us know in advance, and we’ll be happy to coordinate another suitable time.</p>
+                    <p>We look forward to speaking with you.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 1.5rem 0;">
+                    <p style="margin: 0;"><strong>Team Incubein Foundation</strong><br>
+                    Incubein Foundation – RTMNU Business Incubation Centre<br>
+                    Nagpur, Maharashtra<br>
+                    Email: <a href="mailto:teamincubein@gmail.com" style="color: #7c3aed;">teamincubein@gmail.com</a><br>
+                    Website: <a href="http://www.incubein.com" style="color: #7c3aed;">www.incubein.com</a></p>
                 </div>
             </body>
         </html>
@@ -2680,11 +2733,12 @@ def api_schedule_meeting(req: ScheduleMeetingRequest):
     if cursor.fetchone()[0] == 0:
         cursor.execute('''
             INSERT INTO scheduled_meetings (
-                id, lead_id, incubator_name, title, date, time, calendar_event_id, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                id, lead_id, incubator_id, incubator_name, title, date, time, calendar_event_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             meeting_id,
             req.lead_id,
+            lead["incubator_id"],
             lead["incubator_name"],
             summary,
             req.date,
@@ -2728,7 +2782,7 @@ def get_outreach_meetings():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT m.*, l.meeting_link, l.incubator_id 
+        SELECT m.*, l.meeting_link, COALESCE(m.incubator_id, l.incubator_id) as incubator_id 
         FROM scheduled_meetings m
         LEFT JOIN outreach_leads l ON m.lead_id = l.id
     ''')

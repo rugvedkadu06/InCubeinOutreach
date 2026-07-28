@@ -278,12 +278,13 @@ class MongoCursor:
                         "time": 1,
                         "calendar_event_id": 1,
                         "status": 1,
-                        "meeting_link": "$lead.meeting_link"
+                        "meeting_link": "$lead.meeting_link",
+                        "incubator_id": "$lead.incubator_id"
                     }
                 }
             ]
             raw_res = list(self.db["scheduled_meetings"].aggregate(pipeline))
-            keys = ["id", "lead_id", "incubator_name", "title", "date", "time", "calendar_event_id", "status", "meeting_link"]
+            keys = ["id", "lead_id", "incubator_name", "title", "date", "time", "calendar_event_id", "status", "meeting_link", "incubator_id"]
             self.results = [MongoRow(r, keys) for r in raw_res]
             self.current_idx = 0
             self.rowcount = len(self.results)
