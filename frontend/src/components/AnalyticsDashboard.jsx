@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "react-toastify";
 import {
   ShieldCheck,
   MapPin,
@@ -13,6 +15,8 @@ import {
   PieChart as PieIcon,
   BarChart2,
   Target,
+  X,
+  FileText
 } from "lucide-react";
 
 /* ── Skeleton Loaders ────────────────────────────────────────── */
@@ -481,26 +485,353 @@ function StartupStagesWidget({ data }) {
   );
 }
 
+/* ── Entity Timeline & Interaction History Modal ─────────── */
+function TimelineModal({ lead, onClose, onRefresh }) {
+  const [timelineData, setTimelineData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState("");
+  const [newStage, setNewStage] = useState(lead.status || "Draft");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchTimeline = async () => {
+      try {
+        const res = await fetch(`/api/outreach/lead-timeline/${lead.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTimelineData(data);
+          setNotes(data.lead?.notes || "");
+          setNewStage(data.lead?.status || "Draft");
+        }
+      } catch (e) {
+        console.error("Error fetching timeline:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTimeline();
+  }, [lead.id]);
+
+  const handleUpdateStageAndNotes = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/outreach/update-stage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_id: lead.id,
+          stage: newStage,
+          notes: notes
+        })
+      });
+      if (res.ok) {
+        toast.success("Collaboration stage & notes updated!");
+        if (onRefresh) onRefresh();
+      } else {
+        toast.error("Failed to update status.");
+      }
+    } catch (e) {
+      toast.error("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 9999, padding: "20px"
+    }}>
+      <div style={{
+        background: "white", width: "100%", maxWidth: "620px", maxHeight: "90vh",
+        borderRadius: "var(--radius-xl)", border: "1px solid var(--border-color)",
+        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column",
+        overflow: "hidden"
+      }}>
+        {/* Modal Header */}
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-surface)" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)" }}>
+              📋 Interaction History Log & Progress
+            </h3>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600 }}>
+              {lead.incubator_name} ({lead.email})
+            </span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)" }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div style={{ padding: "20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Quick Metrics */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", background: "var(--bg-surface)", padding: "12px", borderRadius: "var(--radius-md)" }}>
+            <div>
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600 }}>Times Contacted</div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--primary)" }}>{lead.contact_count || 0}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600 }}>Current Stage</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#10B981", marginTop: "4px" }}>{newStage}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 600 }}>Entity Type</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-primary)", marginTop: "4px" }}>
+                {lead.incubator_id === "incubein_cohort" ? "Startup" : "Incubator"}
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline Events */}
+          <div>
+            <h4 style={{ margin: "0 0 12px 0", fontSize: "0.88rem", fontWeight: 700, color: "var(--text-primary)" }}>
+              Chronological Activity Log
+            </h4>
+            {loading ? (
+              <p style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Loading activity timeline...</p>
+            ) : timelineData?.timeline?.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderLeft: "2px solid var(--border-color)", paddingLeft: "16px", marginLeft: "8px" }}>
+                {timelineData.timeline.map((item, idx) => (
+                  <div key={idx} style={{ position: "relative" }}>
+                    <div style={{
+                      position: "absolute", left: "-23px", top: "2px", width: "12px", height: "12px",
+                      borderRadius: "50%", background: item.type === "collaboration" ? "#10B981" : item.type === "meeting" ? "#8B5CF6" : "var(--primary)"
+                    }} />
+                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>{item.title}</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginBottom: "2px" }}>{item.timestamp}</div>
+                    <div style={{ fontSize: "0.78rem", color: "var(--text-body)", background: "var(--bg-surface)", padding: "6px 10px", borderRadius: "6px" }}>{item.details}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>No activity recorded yet.</p>
+            )}
+          </div>
+
+          {/* Update Stage & Notes Section */}
+          <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <h4 style={{ margin: 0, fontSize: "0.88rem", fontWeight: 700, color: "var(--text-primary)" }}>
+              Update Progress Stage & Information Notes
+            </h4>
+
+            <div>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
+                Advance Collaboration Stage:
+              </label>
+              <select
+                value={newStage}
+                onChange={(e) => setNewStage(e.target.value)}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", fontSize: "0.85rem" }}
+              >
+                <option value="Draft">Draft / Discovered</option>
+                <option value="Sent">Outreach Sent</option>
+                <option value="Follow-up Sent">Follow-up Sent</option>
+                <option value="Replied">Replied & Interacted</option>
+                <option value="Meeting Scheduled">Meeting Scheduled</option>
+                <option value="MOUs">MOU Signed & Executed</option>
+                <option value="Incubated">Active Incubation (Startup)</option>
+                <option value="TBI Partnership">TBI Partnership (Incubator)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
+                Collected Information & Notes:
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Enter information received, mail records, pitch deck links, meeting outcomes, or MOU terms..."
+                rows={3}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", fontSize: "0.82rem", resize: "vertical" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "flex-end", gap: "10px", background: "var(--bg-surface)" }}>
+          <button onClick={onClose} className="btn btn-secondary" style={{ fontSize: "0.8rem" }}>
+            Close
+          </button>
+          <button onClick={handleUpdateStageAndNotes} disabled={saving} className="btn btn-primary" style={{ fontSize: "0.8rem" }}>
+            {saving ? "Saving..." : "Save Progress Updates"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ── Collaboration Lifecycle & Progress Pipeline Widget ────── */
+function CollaborationLifecycleWidget({ collaborationData, onSelectLead }) {
+  const [stageFilter, setStageFilter] = useState("All");
+  
+  if (!collaborationData) return null;
+  const { pipeline_stages = [], total_contacts_dispatched = 0, leads = [] } = collaborationData;
+
+  const stageColors = {
+    "Ranked & Evaluated": "#64748B",
+    "Outreach Dispatched": "#3B82F6",
+    "Interactions & Replies": "#8B5CF6",
+    "Meetings Booked": "#F59E0B",
+    "MOUs Signed": "#10B981",
+    "Active Incubation": "#059669",
+    "TBI Partnerships": "#0284C7"
+  };
+
+  const filteredLeads = leads.filter(l => {
+    if (stageFilter === "All") return true;
+    if (stageFilter === "Outreach Sent") return l.status === "Sent" || l.status === "Follow-up Sent";
+    if (stageFilter === "Replied") return ["Replied", "In Loop", "Interviewed"].includes(l.status);
+    return l.status === stageFilter;
+  });
+
+  return (
+    <div style={{ marginTop: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+        <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+          🤝 Collaboration & Incubation Progress Tracker
+        </h3>
+        <span style={{ fontSize: "0.78rem", background: "#EFF6FF", color: "#2563EB", padding: "4px 10px", borderRadius: "12px", fontWeight: 700, border: "1px solid #BFDBFE" }}>
+          {total_contacts_dispatched} Total Contact Outreach Interactions Dispatched
+        </span>
+      </div>
+
+      {/* Stage Funnel Visual Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px", marginBottom: "20px" }}>
+        {pipeline_stages.map((stg, i) => (
+          <div
+            key={i}
+            onClick={() => setStageFilter(stageFilter === stg.stage ? "All" : stg.stage)}
+            style={{
+              background: "white",
+              padding: "12px 14px",
+              borderRadius: "var(--radius-lg)",
+              border: `1px solid ${stageFilter === stg.stage ? stageColors[stg.stage] || "var(--primary)" : "var(--border-color)"}`,
+              boxShadow: stageFilter === stg.stage ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>{stg.stage}</div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: stageColors[stg.stage] || "var(--primary)", marginTop: "4px" }}>
+              {stg.count}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Leads Table */}
+      <div className="glass-card" style={{ padding: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+          <h4 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            Entity Collaboration Progress ({filteredLeads.length})
+          </h4>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", fontWeight: 600 }}>Filter:</span>
+            <select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+              className="pagination-size-select"
+              style={{ fontSize: "0.78rem", padding: "4px 8px" }}
+            >
+              <option value="All">All Stages</option>
+              <option value="Outreach Sent">Outreach Sent</option>
+              <option value="Replied">Replied & Interacted</option>
+              <option value="Meeting Scheduled">Meeting Scheduled</option>
+              <option value="MOUs">MOU Signed</option>
+              <option value="Incubated">Active Incubation</option>
+              <option value="TBI Partnership">TBI Partnership</option>
+            </select>
+          </div>
+        </div>
+
+        {filteredLeads.length === 0 ? (
+          <p style={{ fontSize: "0.85rem", color: "var(--text-dim)", textAlign: "center", padding: "20px 0" }}>
+            No entity collaborations found in this stage.
+          </p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left", color: "var(--text-muted)", fontWeight: 700 }}>
+                  <th style={{ padding: "8px 10px" }}>Entity Name</th>
+                  <th style={{ padding: "8px 10px" }}>Email / Contact</th>
+                  <th style={{ padding: "8px 10px", textAlign: "center" }}>Times Contacted</th>
+                  <th style={{ padding: "8px 10px" }}>Current Stage</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLeads.map((lead) => (
+                  <tr key={lead.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                    <td style={{ padding: "10px", fontWeight: 700, color: "var(--text-primary)" }}>
+                      {lead.incubator_name}
+                      <span style={{ display: "block", fontSize: "0.7rem", color: "var(--text-dim)", fontWeight: 500 }}>
+                        {lead.incubator_id === "incubein_cohort" ? "Startup" : "Incubator Hub"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px", color: "var(--text-muted)" }}>{lead.email}</td>
+                    <td style={{ padding: "10px", textAlign: "center", fontWeight: 800, color: "var(--primary)" }}>
+                      {lead.contact_count || 0}
+                    </td>
+                    <td style={{ padding: "10px" }}>
+                      <span style={{
+                        padding: "3px 8px", borderRadius: "12px", fontSize: "0.72rem", fontWeight: 700,
+                        background: lead.status === "Incubated" ? "#D1FAE5" : lead.status === "MOUs" ? "#FEF3C7" : lead.status === "Meeting Scheduled" ? "#E0E7FF" : "var(--bg-surface)",
+                        color: lead.status === "Incubated" ? "#065F46" : lead.status === "MOUs" ? "#92400E" : lead.status === "Meeting Scheduled" ? "#3730A3" : "var(--text-body)",
+                        border: "1px solid var(--border-color)"
+                      }}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right" }}>
+                      <button
+                        onClick={() => onSelectLead(lead)}
+                        className="btn btn-secondary"
+                        style={{ fontSize: "0.75rem", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                      >
+                        <FileText size={12} /> Timeline Log
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Dashboard Component ────────────────────────────────── */
 export default function AnalyticsDashboard({ analyticsData, loading }) {
   const [leads, setLeads] = useState([]);
   const [fetchingLeads, setFetchingLeads] = useState(true);
-  const [viewMode, setViewMode] = useState("overview"); // "overview" | "incubators" | "startups"
+  const [viewMode, setViewMode] = useState("overview"); // "overview" | "incubators" | "startups" | "collaboration"
+  const [selectedTimelineLead, setSelectedTimelineLead] = useState(null);
+
+  const fetchLeads = async () => {
+    try {
+      const res = await fetch("/api/outreach/leads");
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data || []);
+      }
+    } catch (e) {
+      console.error("Error fetching leads for dashboard analytics:", e);
+    } finally {
+      setFetchingLeads(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchLeads = async () => {
-      try {
-        const res = await fetch("/api/outreach/leads");
-        if (res.ok) {
-          const data = await res.json();
-          setLeads(data || []);
-        }
-      } catch (e) {
-        console.error("Error fetching leads for dashboard analytics:", e);
-      } finally {
-        setFetchingLeads(false);
-      }
-    };
     fetchLeads();
   }, []);
 
@@ -602,12 +933,20 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
           >
             🚀 Startups Analysis
           </button>
+          <button
+            className={`btn ${viewMode === "collaboration" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("collaboration")}
+            style={{ fontSize: "0.82rem", padding: "6px 14px" }}
+          >
+            🤝 Collaboration Pipeline
+          </button>
         </div>
 
         <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", fontWeight: 600 }}>
           {viewMode === "overview" && "Combined Insights & Outreach Funnel"}
           {viewMode === "incubators" && `Deep-Dive into ${totals.incubators} Incubators`}
           {viewMode === "startups" && `Deep-Dive into ${totalStartupsCount} Startups`}
+          {viewMode === "collaboration" && "Entity Lifecycle & Interaction Tracker"}
         </div>
       </div>
 
@@ -831,6 +1170,25 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
 
           </div>
         </div>
+      )}
+
+      {/* ─── COLLABORATION LIFECYCLE TRACKER VIEW ──────────────── */}
+      {(viewMode === "overview" || viewMode === "collaboration") && (
+        <CollaborationLifecycleWidget
+          collaborationData={analyticsData.collaboration_progress}
+          onSelectLead={(lead) => setSelectedTimelineLead(lead)}
+        />
+      )}
+
+      {/* Interactive Timeline Modal */}
+      {selectedTimelineLead && (
+        <TimelineModal
+          lead={selectedTimelineLead}
+          onClose={() => setSelectedTimelineLead(null)}
+          onRefresh={() => {
+            fetchLeads();
+          }}
+        />
       )}
 
     </div>

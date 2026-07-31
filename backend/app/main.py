@@ -405,6 +405,31 @@ def get_analytics():
                 pass
     unique_focus_areas = sorted(list(all_areas))
 
+    # Collaboration Lifecycle & Progress Pipeline
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'Sent' OR status = 'Follow-up Sent' OR contact_count > 0")
+    total_outreach_sent = cursor.fetchone()[0]
+
+    cursor.execute("SELECT SUM(coalesce(contact_count, 0)) FROM outreach_leads")
+    total_contacts_dispatched = cursor.fetchone()[0] or 0
+
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status IN ('Replied', 'In Loop', 'Interviewed')")
+    replied_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM scheduled_meetings WHERE status != 'Cancelled'")
+    meeting_scheduled_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'MOUs'")
+    mou_signed_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'Incubated'")
+    active_incubation_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'TBI Partnership'")
+    tbi_partnerships_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT id, incubator_id, incubator_name, email, status, coalesce(contact_count, 0) as contact_count, sent_at, notes, next_action_date, meeting_scheduled_at FROM outreach_leads ORDER BY case when status='Incubated' then 1 when status='MOUs' then 2 when status='Meeting Scheduled' then 3 when status='Replied' then 4 when status='Sent' then 5 else 6 end LIMIT 50")
+    collaboration_leads_raw = [dict(row) for row in cursor.fetchall()]
+
     conn.close()
 
     return {
@@ -430,6 +455,19 @@ def get_analytics():
             "city_distribution": startup_city_distribution,
             "incubated_count": incubated_startups_count,
             "avg_confidence": avg_confidence
+        },
+        "collaboration_progress": {
+            "pipeline_stages": [
+                {"stage": "Ranked & Evaluated", "count": total_incubators + total_startups, "key": "ranked"},
+                {"stage": "Outreach Dispatched", "count": total_outreach_sent, "key": "outreach_sent"},
+                {"stage": "Interactions & Replies", "count": replied_count, "key": "replied"},
+                {"stage": "Meetings Booked", "count": meeting_scheduled_count, "key": "meeting_scheduled"},
+                {"stage": "MOUs Signed", "count": mou_signed_count, "key": "mou_signed"},
+                {"stage": "Active Incubation", "count": active_incubation_count + incubated_startups_count, "key": "active_incubation"},
+                {"stage": "TBI Partnerships", "count": tbi_partnerships_count, "key": "tbi_partnership"}
+            ],
+            "total_contacts_dispatched": total_contacts_dispatched,
+            "leads": collaboration_leads_raw
         },
         "filters": {
             "states": unique_states,
@@ -1533,6 +1571,103 @@ def update_lead_notes(req: UpdateLeadNotesRequest):
     conn.commit()
     conn.close()
     return {"status": "success", "message": "Campaign lead notes updated successfully."}
+
+class UpdateStageRequest(BaseModel):
+    lead_id: str
+    stage: str
+    notes: Optional[str] = None
+
+@app.post("/api/outreach/update-stage")
+def update_collaboration_stage(req: UpdateStageRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM outreach_leads WHERE id = ?", (req.lead_id,))
+    lead = cursor.fetchone()
+    if not lead:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    if req.notes is not None:
+        cursor.execute("UPDATE outreach_leads SET status = ?, notes = ? WHERE id = ?", (req.stage, req.notes, req.lead_id))
+    else:
+        cursor.execute("UPDATE outreach_leads SET status = ? WHERE id = ?", (req.stage, req.lead_id))
+        
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": f"Collaboration stage updated to '{req.stage}'."}
+
+@app.get("/api/outreach/lead-timeline/{lead_id}")
+def get_lead_timeline(lead_id: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM outreach_leads WHERE id = ?", (lead_id,))
+    lead_row = cursor.fetchone()
+    if not lead_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    lead = dict(lead_row)
+    
+    cursor.execute("SELECT * FROM scheduled_meetings WHERE lead_id = ? OR incubator_name = ?", (lead_id, lead["incubator_name"]))
+    meetings = [dict(r) for r in cursor.fetchall()]
+    
+    conn.close()
+    
+    timeline = []
+    
+    timeline.append({
+        "type": "ranked",
+        "title": "Ranked & Added to System",
+        "timestamp": lead.get("sent_at") or "Initial Setup",
+        "details": f"Entity {lead['incubator_name']} indexed in ecosystem intelligence platform."
+    })
+    
+    if lead.get("sent_at") or lead.get("contact_count", 0) > 0:
+        cnt = lead.get("contact_count", 1)
+        timeline.append({
+            "type": "outreach",
+            "title": f"Outreach Email Dispatched (Contact Count: {cnt})",
+            "timestamp": lead.get("sent_at") or "Recently",
+            "details": f"Outreach email campaign sent to {lead['email']}."
+        })
+        
+    if lead.get("followup_count", 0) > 0:
+        timeline.append({
+            "type": "followup",
+            "title": f"Follow-up Sent (#{lead['followup_count']})",
+            "timestamp": lead.get("last_followup_at") or "Recently",
+            "details": f"Follow-up email dispatched."
+        })
+        
+    if lead.get("reply_detected_at") or lead.get("reply_text"):
+        timeline.append({
+            "type": "reply",
+            "title": "Reply & Information Received",
+            "timestamp": lead.get("reply_detected_at") or "Recently",
+            "details": lead.get("reply_text") or "Entity responded to outreach email."
+        })
+        
+    for m in meetings:
+        timeline.append({
+            "type": "meeting",
+            "title": f"Meeting Booked ({m.get('status', 'Scheduled')})",
+            "timestamp": f"{m.get('meeting_date', '')} {m.get('meeting_time', '')}".strip(),
+            "details": f"Subject: {m.get('subject')} | Link: {m.get('meeting_link') or 'Google Meet'}"
+        })
+        
+    if lead.get("status") in ["MOUs", "Incubated", "TBI Partnership"]:
+        timeline.append({
+            "type": "collaboration",
+            "title": f"Collaboration Stage: {lead['status']}",
+            "timestamp": "Active",
+            "details": lead.get("notes") or f"Entity reached status {lead['status']}."
+        })
+        
+    return {
+        "lead": lead,
+        "meetings": meetings,
+        "timeline": timeline
+    }
 
 @app.post("/api/outreach/send-email")
 def trigger_outreach_email(req: OutreachEmailRequest):
