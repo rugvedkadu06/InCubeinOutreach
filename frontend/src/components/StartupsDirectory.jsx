@@ -10,6 +10,8 @@ export default function StartupsDirectory() {
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedSector, setSelectedSector] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   
   // Drawer state
   const [activeDrawerStartup, setActiveDrawerStartup] = useState(null);
@@ -56,6 +58,7 @@ export default function StartupsDirectory() {
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     const timer = setTimeout(() => {
       fetchStartups();
     }, 300);
@@ -68,15 +71,8 @@ export default function StartupsDirectory() {
       return;
     }
     
-    // Check if we have email info. Since the startups collection stores decrypted cohort entries,
-    // let's try to fetch its email from evaluator database or use a placeholder if empty.
-    // If it's a cohort startup, we can call the campaigns api directly with this startup name
     setAddingToCampaign(true);
     try {
-      // Find the email dynamically. In standard scraped startups, they might have email,
-      // for cohort startups they definitely had email. Let's send a request to add lead.
-      // We can generate a dummy email founder@name.com if no email exists, or ask for email.
-      
       const res = await fetch("/api/outreach/add-lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,6 +99,14 @@ export default function StartupsDirectory() {
   const sectors = ["All", ...new Set(startups.map(s => s.sector).filter(Boolean))];
   const stages = ["All", ...new Set(startups.map(s => s.funding_stage).filter(Boolean))];
   const cities = ["All", ...new Set(startups.map(s => s.hq_city).filter(Boolean))];
+
+  const totalItems = startups.length;
+  const isAll = pageSize === "All";
+  const limit = isAll ? totalItems : (pageSize || 12);
+  const totalPages = isAll || totalItems === 0 ? 1 : Math.ceil(totalItems / limit);
+  const startIndex = isAll ? 0 : (currentPage - 1) * limit;
+  const endIndex = isAll ? totalItems : Math.min(startIndex + limit, totalItems);
+  const paginatedStartups = startups.slice(startIndex, endIndex);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", marginTop: "1rem" }}>
@@ -226,108 +230,167 @@ export default function StartupsDirectory() {
             .map(s => s.id);
 
           return (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-              gap: "16px"
-            }}>
-              {startups.map((st) => {
-                const isTop3 = top3Ids.includes(st.id);
-                return (
-                  <div
-                    key={st.id}
-                    onClick={() => setActiveDrawerStartup(st)}
-                    style={{
-                      background: isTop3 ? "rgba(16, 185, 129, 0.05)" : "white",
-                      borderWidth: "1px",
-                      borderStyle: "solid",
-                      borderColor: "var(--border-color)",
-                      borderLeftColor: isTop3 ? "#10b981" : "var(--border-color)",
-                      borderLeftWidth: isTop3 ? "4px" : "1px",
-                      borderRadius: "var(--radius-lg)",
-                      padding: "12px",
-                      cursor: "pointer",
-                      transition: "all var(--transition-base)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px"
-                    }}
-                    className="card-hover"
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span className="badge badge-primary" style={{ fontSize: "0.68rem" }}>
-                        {st.sector}
-                      </span>
-                      <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", fontWeight: 700 }}>
-                        {st.funding_stage}
-                      </span>
-                    </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 500 }}>
+                  Showing <strong>{totalItems > 0 ? startIndex + 1 : 0} – {endIndex}</strong> of <strong style={{ color: "var(--text-primary)" }}>{totalItems}</strong> startups
+                </span>
+              </div>
 
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <h3 style={{ fontSize: "1rem", fontWeight: 800, color: "var(--text-primary)", margin: "4px 0" }}>
-                          {st.startup_name}
-                        </h3>
-                        {isTop3 && (
-                          <span style={{
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            fontSize: "0.58rem",
-                            fontWeight: 800,
-                            background: "#e6f4ea",
-                            color: "#137333",
-                            border: "1px solid #ceead6",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.02em"
-                          }}>
-                            Top Tier
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: "16px"
+              }}>
+                {paginatedStartups.map((st) => {
+                  const isTop3 = top3Ids.includes(st.id);
+                  return (
+                    <div
+                      key={st.id}
+                      onClick={() => setActiveDrawerStartup(st)}
+                      style={{
+                        background: isTop3 ? "rgba(16, 185, 129, 0.05)" : "white",
+                        borderWidth: "1px",
+                        borderStyle: "solid",
+                        borderColor: "var(--border-color)",
+                        borderLeftColor: isTop3 ? "#10b981" : "var(--border-color)",
+                        borderLeftWidth: isTop3 ? "4px" : "1px",
+                        borderRadius: "var(--radius-lg)",
+                        padding: "12px",
+                        cursor: "pointer",
+                        transition: "all var(--transition-base)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px"
+                      }}
+                      className="card-hover"
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <span className="badge badge-primary" style={{ fontSize: "0.68rem" }}>
+                          {st.sector}
+                        </span>
+                        {st.funding_stage && (
+                          <span className="badge badge-secondary" style={{ fontSize: "0.68rem" }}>
+                            {st.funding_stage}
                           </span>
                         )}
                       </div>
+
+                      <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--text-primary)" }}>
+                        {st.startup_name}
+                      </div>
+
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", flex: 1 }}>
+                        {st.description || "No description provided."}
+                      </div>
+
                       {st.founders && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          <User size={12} />
+                        <div style={{ fontSize: "0.76rem", color: "var(--text-body)", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <User size={12} color="var(--primary)" />
                           <span>{st.founders}</span>
                         </div>
                       )}
-                    </div>
 
-                    <div style={{
-                      borderTop: "1px solid var(--border-color)",
-                      paddingTop: "8px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      fontSize: "0.76rem",
-                      color: "var(--text-dim)",
-                      marginTop: "auto"
-                    }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-                        <MapPin size={12} /> {st.hq_city}
-                      </span>
-                      {st.confidence_score && (
-                        <span style={{ fontWeight: 800, color: isTop3 ? "#137333" : "var(--primary)" }}>
-                          Score: {st.confidence_score}
+                      <div style={{
+                        borderTop: "1px solid var(--border-color)",
+                        paddingTop: "8px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        fontSize: "0.76rem",
+                        color: "var(--text-dim)",
+                        marginTop: "auto"
+                      }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                          <MapPin size={12} /> {st.hq_city}
                         </span>
-                      )}
+                        {st.confidence_score && (
+                          <span style={{ fontWeight: 800, color: isTop3 ? "#137333" : "var(--primary)" }}>
+                            Score: {st.confidence_score}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: "4px", display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          className="btn btn-primary btn-icon"
+                          style={{ padding: "6px", fontSize: "0.8rem", background: "var(--primary-light)", color: "var(--primary)", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          onClick={(e) => { e.stopPropagation(); handleAddToCampaign(st); }}
+                          disabled={addingToCampaign}
+                          title="Add to Campaign"
+                        >
+                          {addingToCampaign ? "..." : "+"}
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ marginTop: "4px", display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        className="btn btn-primary btn-icon"
-                        style={{ padding: "6px", fontSize: "0.8rem", background: "var(--primary-light)", color: "var(--primary)", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
-                        onClick={(e) => { e.stopPropagation(); handleAddToCampaign(st); }}
-                        disabled={addingToCampaign}
-                        title="Add to Campaign"
-                      >
-                        {addingToCampaign ? "..." : "+"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           );
         })()
+      )}
+
+      {/* ─── Pagination Controls ─────────────────────────────── */}
+      {!loading && totalItems > 0 && (
+        <div className="pagination-container">
+          <div className="pagination-info">
+            Showing <strong>{startIndex + 1}</strong> – <strong>{endIndex}</strong> of <strong>{totalItems}</strong> startups
+          </div>
+          
+          <div className="pagination-controls">
+            <button
+              className="pagination-btn"
+              disabled={currentPage <= 1 || isAll}
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            >
+              &laquo; Prev
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              .map((p, i, arr) => {
+                const prevP = arr[i - 1];
+                const showEllipsis = prevP && p - prevP > 1;
+                return (
+                  <React.Fragment key={p}>
+                    {showEllipsis && <span style={{ color: "var(--text-dim)", padding: "0 4px" }}>...</span>}
+                    <button
+                      className={`pagination-btn ${currentPage === p ? "active" : ""}`}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+
+            <button
+              className="pagination-btn"
+              disabled={currentPage >= totalPages || isAll}
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            >
+              Next &raquo;
+            </button>
+          </div>
+
+          <div className="pagination-size-select">
+            <span>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const val = e.target.value === "All" ? "All" : Number(e.target.value);
+                setPageSize(val);
+                setCurrentPage(1);
+              }}
+            >
+              <option value={6}>6</option>
+              <option value={12}>12</option>
+              <option value={24}>24</option>
+              <option value={48}>48</option>
+              <option value="All">All</option>
+            </select>
+          </div>
+        </div>
       )}
 
       {/* ─── SLIDE OVER DRAWER ──────────────────────────────────── */}

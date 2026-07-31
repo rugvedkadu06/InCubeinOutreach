@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import sys
 import re
 import pymongo
 from datetime import datetime
@@ -8,7 +9,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ecosystem.db")
+# When running as a PyInstaller exe, store DB next to the .exe so data persists.
+# In dev mode, keep it in the backend/ folder as before.
+if getattr(sys, 'frozen', False):
+    _data_dir = os.path.dirname(sys.executable)
+else:
+    _data_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DB_PATH = os.path.join(_data_dir, "ecosystem.db")
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
 
 _mongo_client = None
@@ -224,30 +232,31 @@ class MongoCursor:
             
         sql_clean = " ".join(sql.split()).strip()
         
-        # Intercept custom aggregations / Joins
-        if "GROUP BY state" in sql_clean:
+        # Intercept GROUP BY queries generically for MongoDB
+        group_match = re.search(r"SELECT\s+(.*?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.*?))?\s+GROUP\s+BY\s+(\w+)", sql_clean, re.IGNORECASE)
+        if group_match:
+            table_name = group_match.group(2).strip()
+            where_str = group_match.group(3).strip() if group_match.group(3) else ""
+            group_field = group_match.group(4).strip().lower()
+            
+            filter_doc = parse_where_clause(where_str, params) if where_str else {}
+            if group_field not in filter_doc:
+                filter_doc[group_field] = {"$ne": None, "$not": {"$regex": "^$"}}
+            
+            limit_match = re.search(r"LIMIT\s+(\d+)", sql_clean, re.IGNORECASE)
+            limit_val = int(limit_match.group(1)) if limit_match else None
+            
             pipeline = [
-                {"$match": {"state": {"$ne": None, "$not": {"$regex": "^$"}}}},
-                {"$group": {"_id": "$state", "count": {"$sum": 1}}},
-                {"$project": {"state": "$_id", "count": 1, "_id": 0}},
+                {"$match": filter_doc},
+                {"$group": {"_id": f"${group_field}", "count": {"$sum": 1}}},
+                {"$project": {group_field: "$_id", "count": 1, "_id": 0}},
                 {"$sort": {"count": -1}}
             ]
-            raw_res = list(self.db["incubators"].aggregate(pipeline))
-            self.results = [MongoRow(r, ["state", "count"]) for r in raw_res]
-            self.current_idx = 0
-            self.rowcount = len(self.results)
-            return self
-            
-        if "GROUP BY city" in sql_clean:
-            pipeline = [
-                {"$match": {"city": {"$ne": None, "$not": {"$regex": "^$"}}}},
-                {"$group": {"_id": "$city", "count": {"$sum": 1}}},
-                {"$project": {"city": "$_id", "count": 1, "_id": 0}},
-                {"$sort": {"count": -1}},
-                {"$limit": 8}
-            ]
-            raw_res = list(self.db["incubators"].aggregate(pipeline))
-            self.results = [MongoRow(r, ["city", "count"]) for r in raw_res]
+            if limit_val:
+                pipeline.append({"$limit": limit_val})
+                
+            raw_res = list(self.db[table_name].aggregate(pipeline))
+            self.results = [MongoRow(r, [group_field, "count"]) for r in raw_res]
             self.current_idx = 0
             self.rowcount = len(self.results)
             return self

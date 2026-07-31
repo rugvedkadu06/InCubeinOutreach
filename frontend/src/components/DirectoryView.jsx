@@ -212,6 +212,13 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedState, selectedCity, selectedSector, selectedRegion, sortMode]);
+
   const getSortedIncubators = () => {
     let list = [...incubators];
     if (sortMode === "region") {
@@ -231,6 +238,13 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
   };
 
   const sortedIncubators = getSortedIncubators();
+  const totalItems = sortedIncubators.length;
+  const isAll = pageSize === "All";
+  const limit = isAll ? totalItems : (pageSize || 12);
+  const totalPages = isAll || totalItems === 0 ? 1 : Math.ceil(totalItems / limit);
+  const startIndex = isAll ? 0 : (currentPage - 1) * limit;
+  const endIndex = isAll ? totalItems : Math.min(startIndex + limit, totalItems);
+  const paginatedIncubators = sortedIncubators.slice(startIndex, endIndex);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -268,85 +282,69 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
       {/* Filtering Bar */}
       <div className="filter-bar" style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
 
-        {/* Search */}
-        <div style={{ position: "relative", minWidth: "200px", flexGrow: 1 }}>
-          <Search size={16} style={{ position: "absolute", left: "10px", top: "12px", color: "var(--text-dim)" }} />
+        {/* Search Input */}
+        <div style={{ flex: "1 1 200px", minWidth: 200, position: "relative" }}>
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-dim)" }} />
           <input
             type="text"
-            className="search-input"
-            style={{ paddingLeft: "2.25rem", width: "100%" }}
-            placeholder="Search by name, source..."
+            className="input-field"
+            placeholder="Search incubators by name, head, description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ paddingLeft: 38 }}
           />
         </div>
 
-        {/* Regions */}
+        {/* State Filter */}
         <select
-          className="filter-select"
-          value={selectedRegion}
-          onChange={(e) => {
-            setSelectedRegion(e.target.value);
-            setSelectedState("");
-            setSelectedCity("");
-          }}
-        >
-          <option value="">All Regions</option>
-          <option value="North">North</option>
-          <option value="South">South</option>
-          <option value="East">East</option>
-          <option value="West">West</option>
-          <option value="Central">Central</option>
-          <option value="Northeast">Northeast</option>
-        </select>
-
-        {/* States */}
-        <select
-          className="filter-select"
           value={selectedState}
           onChange={(e) => setSelectedState(e.target.value)}
+          style={{ height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px", fontSize: "0.85rem", background: "white" }}
         >
           <option value="">All States</option>
-          {filtersData && filtersData.states && filtersData.states.map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
+          {filtersData?.states?.map(st => <option key={st} value={st}>{st}</option>)}
         </select>
 
-        {/* Cities */}
+        {/* City Filter */}
         <select
-          className="filter-select"
           value={selectedCity}
           onChange={(e) => setSelectedCity(e.target.value)}
+          style={{ height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px", fontSize: "0.85rem", background: "white" }}
         >
           <option value="">All Cities</option>
-          {filtersData && filtersData.cities && filtersData.cities.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
+          {filtersData?.cities?.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
-        {/* Focus Areas */}
+        {/* Sector Filter */}
         <select
-          className="filter-select"
           value={selectedSector}
           onChange={(e) => setSelectedSector(e.target.value)}
+          style={{ height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px", fontSize: "0.85rem", background: "white" }}
         >
-          <option value="">All Sectors</option>
-          {filtersData && filtersData.focus_areas && filtersData.focus_areas.map(sec => (
-            <option key={sec} value={sec}>{sec}</option>
-          ))}
+          <option value="">All Focus Sectors</option>
+          {filtersData?.focus_areas?.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
-        {/* Sort Order */}
+        {/* Region Filter */}
         <select
-          className="filter-select"
+          value={selectedRegion}
+          onChange={(e) => setSelectedRegion(e.target.value)}
+          style={{ height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px", fontSize: "0.85rem", background: "white" }}
+        >
+          <option value="">All Regions</option>
+          {filtersData?.regions?.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+
+        {/* Sorting mode */}
+        <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value)}
+          style={{ height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px", fontSize: "0.85rem", background: "white" }}
         >
-          <option value="name">Sort: Name (A-Z)</option>
-          <option value="region">Sort: Region Partition</option>
+          <option value="name">Sort by Name (A-Z)</option>
+          <option value="region">Sort by Region</option>
         </select>
 
-        {/* Clear Filters Button */}
         {(searchQuery || selectedState || selectedCity || selectedSector || selectedRegion || sortMode !== "name") && (
           <button 
             className="btn btn-secondary"
@@ -357,6 +355,7 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
               setSelectedSector("");
               setSelectedRegion("");
               setSortMode("name");
+              setCurrentPage(1);
             }}
           >
             Reset Filters
@@ -366,9 +365,9 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
 
       {/* Result count */}
       {!loading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
           <span style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 500 }}>
-            Showing <strong style={{ color: "var(--text-primary)" }}>{sortedIncubators.length}</strong> incubators
+            Showing <strong>{totalItems > 0 ? startIndex + 1 : 0} – {endIndex}</strong> of <strong style={{ color: "var(--text-primary)" }}>{totalItems}</strong> incubators
             {(searchQuery || selectedState || selectedCity || selectedSector || selectedRegion) && " (filtered)"}
           </span>
         </div>
@@ -400,7 +399,7 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
         </div>
       ) : (
         <div className="directory-grid">
-          {sortedIncubators.map((inc, idx) => {
+          {paginatedIncubators.map((inc, idx) => {
             const orgType = (inc.source_url || "").toLowerCase().includes("gov") ? "government" : 
                            (inc.source_url || "").toLowerCase().includes("corp") ? "corporate" : "academic";
             return (
@@ -434,6 +433,69 @@ export default function DirectoryView({ filtersData, onDraftMou }) {
             </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── Pagination Controls ─────────────────────────────── */}
+      {!loading && totalItems > 0 && (
+        <div className="pagination-container">
+          <div className="pagination-info">
+            Showing <strong>{startIndex + 1}</strong> – <strong>{endIndex}</strong> of <strong>{totalItems}</strong> incubators
+          </div>
+          
+          <div className="pagination-controls">
+            <button
+              className="pagination-btn"
+              disabled={currentPage <= 1 || isAll}
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            >
+              &laquo; Prev
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+              .map((p, i, arr) => {
+                const prevP = arr[i - 1];
+                const showEllipsis = prevP && p - prevP > 1;
+                return (
+                  <React.Fragment key={p}>
+                    {showEllipsis && <span style={{ color: "var(--text-dim)", padding: "0 4px" }}>...</span>}
+                    <button
+                      className={`pagination-btn ${currentPage === p ? "active" : ""}`}
+                      onClick={() => setCurrentPage(p)}
+                    >
+                      {p}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+
+            <button
+              className="pagination-btn"
+              disabled={currentPage >= totalPages || isAll}
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            >
+              Next &raquo;
+            </button>
+          </div>
+
+          <div className="pagination-size-select">
+            <span>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const val = e.target.value === "All" ? "All" : Number(e.target.value);
+                setPageSize(val);
+                setCurrentPage(1);
+              }}
+            >
+              <option value={6}>6</option>
+              <option value={12}>12</option>
+              <option value={24}>24</option>
+              <option value={48}>48</option>
+              <option value="All">All</option>
+            </select>
+          </div>
         </div>
       )}
 

@@ -233,15 +233,6 @@ function LineChart({ leads = [] }) {
       }
     });
 
-    // Baseline fallback to show a visual line if there are no dispatches yet:
-    const baseSent = [4, 8, 5, 11, 8, 3, 6];
-    const baseReplies = [1, 2, 3, 5, 4, 1, 2];
-
-    for (let i = 0; i < 7; i++) {
-      sent[i] += baseSent[i];
-      replies[i] += baseReplies[i];
-    }
-
     return { days: daysLabel, sentData: sent, repliesData: replies };
   }, [leads]);
 
@@ -406,10 +397,10 @@ function TopIncubatorsWidget({ data }) {
     <div className="glass-card chart-card">
       <h3>
         <Star size={16} color="var(--warning)" style={{ marginRight: 4 }} />
-        Top Ranked Incubators
+        Top Ranked Incubators Leaderboard
       </h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {data.slice(0, 5).map((inc, idx) => (
+        {data.slice(0, 6).map((inc, idx) => (
           <div
             key={inc.name || idx}
             style={{
@@ -424,28 +415,28 @@ function TopIncubatorsWidget({ data }) {
             }}
           >
             <div style={{
-              width: 26, height: 26,
+              width: 28, height: 28,
               borderRadius: "50%",
-              background: "var(--primary-light)",
-              color: "var(--primary)",
+              background: idx === 0 ? "linear-gradient(135deg, #F59E0B, #FCD34D)" : idx === 1 ? "linear-gradient(135deg, #94A3B8, #CBD5E1)" : idx === 2 ? "linear-gradient(135deg, #D97706, #F59E0B)" : "var(--primary-light)",
+              color: idx < 3 ? "white" : "var(--primary)",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontWeight: 800, fontSize: "0.75rem", flexShrink: 0,
             }}>
               {idx + 1}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ fontWeight: 700, fontSize: "0.86rem", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {inc.name}
               </div>
               {inc.city && (
                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 3 }}>
-                  <MapPin size={10} /> {inc.city}, {inc.state}
+                  <MapPin size={10} /> {inc.city}{inc.state ? `, ${inc.state}` : ""}
                 </div>
               )}
             </div>
             {inc.startups_count !== undefined && (
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)" }}>{inc.startups_count}</div>
+                <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "var(--primary)" }}>{inc.startups_count}</div>
                 <div style={{ fontSize: "0.68rem", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.4px" }}>Startups</div>
               </div>
             )}
@@ -456,10 +447,45 @@ function TopIncubatorsWidget({ data }) {
   );
 }
 
+/* ── Startup Stage Distribution Card ────────────────────────── */
+function StartupStagesWidget({ data }) {
+  if (!data || data.length === 0) return null;
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  const colors = ["#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EC4899", "#6366F1"];
+
+  return (
+    <div className="glass-card chart-card">
+      <h3>
+        <BarChart2 size={16} style={{ color: "#10B981", marginRight: 4 }} />
+        Startup Funding Stage Breakdown
+      </h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px" }}>
+        {data.map((item, idx) => {
+          const pct = total ? Math.round((item.count / total) * 100) : 0;
+          return (
+            <div key={idx} style={{ animation: `fadeSlideUp 0.35s var(--ease-out) ${idx * 0.05}s both` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-body)", marginBottom: "4px" }}>
+                <span>{item.funding_stage || "Unspecified"}</span>
+                <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>
+                  {item.count} <span style={{ fontSize: "0.7rem", color: "var(--text-dim)", fontWeight: 500 }}>({pct}%)</span>
+                </span>
+              </div>
+              <div style={{ width: "100%", height: "8px", background: "var(--bg-surface)", borderRadius: "99px", overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: colors[idx % colors.length], borderRadius: "99px", transition: "width 1s ease" }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Dashboard Component ────────────────────────────────── */
 export default function AnalyticsDashboard({ analyticsData, loading }) {
   const [leads, setLeads] = useState([]);
   const [fetchingLeads, setFetchingLeads] = useState(true);
+  const [viewMode, setViewMode] = useState("overview"); // "overview" | "incubators" | "startups"
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -513,32 +539,93 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
     totals,
     state_distribution,
     region_distribution,
+    org_type_distribution,
     top_hubs,
     sector_distribution,
     top_incubators,
+    startup_analytics
   } = analyticsData;
 
   const maxStateVal  = state_distribution?.length  > 0 ? state_distribution[0].count  : 1;
   const maxRegionVal = region_distribution?.length > 0 ? region_distribution[0].count : 1;
   const maxSectorVal = sector_distribution?.length > 0 ? sector_distribution[0].count : 1;
 
+  // Startup analytics metrics
+  const startupSectors = startup_analytics?.sector_distribution || [];
+  const maxStartupSectorVal = startupSectors.length > 0 ? startupSectors[0].count : 1;
+
+  const startupCities = startup_analytics?.city_distribution || [];
+  const maxStartupCityVal = startupCities.length > 0 ? startupCities[0].count : 1;
+
+  const startupStages = startup_analytics?.stage_distribution || [];
+  const totalStartupsCount = totals.startups || (startup_analytics?.total_startups || 0);
+
   // Compute live campaign conversion ratio metrics
   const sentLeadsCount = leads.filter(l => l.status !== "Draft").length;
   const repliedLeadsCount = leads.filter(l => ["Replied", "Meeting Scheduled", "Not Interested", "In Loop", "Interviewed", "Incubated"].includes(l.status)).length;
   const conversionRatioVal = sentLeadsCount > 0 ? ((repliedLeadsCount / sentLeadsCount) * 100).toFixed(1) : "0.0";
-  const totalStartups = leads.filter(l => l.incubator_id === "incubein_cohort").length;
 
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      
+      {/* View Mode Navigation Tabs */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "white",
+        padding: "10px 14px",
+        borderRadius: "var(--radius-xl)",
+        border: "1px solid var(--border-color)",
+        flexWrap: "wrap",
+        gap: "12px"
+      }}>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            className={`btn ${viewMode === "overview" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("overview")}
+            style={{ fontSize: "0.82rem", padding: "6px 14px" }}
+          >
+            🌟 Ecosystem Overview
+          </button>
+          <button
+            className={`btn ${viewMode === "incubators" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("incubators")}
+            style={{ fontSize: "0.82rem", padding: "6px 14px" }}
+          >
+            🏢 Incubators Analysis
+          </button>
+          <button
+            className={`btn ${viewMode === "startups" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("startups")}
+            style={{ fontSize: "0.82rem", padding: "6px 14px" }}
+          >
+            🚀 Startups Analysis
+          </button>
+        </div>
+
+        <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", fontWeight: 600 }}>
+          {viewMode === "overview" && "Combined Insights & Outreach Funnel"}
+          {viewMode === "incubators" && `Deep-Dive into ${totals.incubators} Incubators`}
+          {viewMode === "startups" && `Deep-Dive into ${totalStartupsCount} Startups`}
+        </div>
+      </div>
+
       {/* KPI Metrics Row */}
-      <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+      <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
         <MetricCard
           title="Total Incubators"
           value={totals.incubators}
           Icon={ShieldCheck}
           iconColor="var(--primary)"
           footer="Active innovation hubs"
-          trend="+12%"
+        />
+        <MetricCard
+          title="Total Startups"
+          value={totalStartupsCount}
+          Icon={Target}
+          iconColor="#10B981"
+          footer="Tracked & cohort startups"
         />
         <MetricCard
           title="States Covered"
@@ -546,7 +633,6 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
           Icon={MapPin}
           iconColor="var(--info)"
           footer="Unique Indian states"
-          trend="All major"
         />
         <MetricCard
           title="Cities Covered"
@@ -554,7 +640,6 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
           Icon={Building2}
           iconColor="var(--warning)"
           footer="Active urban hubs"
-          trend="+8 this quarter"
         />
         <MetricCard
           title="Sectors Supported"
@@ -562,107 +647,192 @@ export default function AnalyticsDashboard({ analyticsData, loading }) {
           Icon={Layers}
           iconColor="var(--accent)"
           footer="Technology verticals"
-          trend="Expanding"
         />
         <MetricCard
           title="Campaign Conv. Ratio"
           value={`${conversionRatioVal}%`}
           Icon={Send}
-          iconColor="#10B981"
+          iconColor="#8B5CF6"
           footer="Outreach response rate"
-          trend="Active"
-        />
-        <MetricCard
-          title="Startups Tracked"
-          value={totalStartups}
-          Icon={Target}
-          iconColor="#3B82F6"
-          footer="Active ecosystem startups"
-          trend="In CRM"
         />
       </div>
 
-      {/* Campaign Outreach Analytics & Funnels Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginBottom: "20px" }}>
-        
-        {/* SVG Donut Chart */}
-        <div className="glass-card chart-card">
-          <h3>
-            <PieIcon size={16} style={{ color: "var(--primary)", marginRight: 4 }} />
-            Incubator Region Share (Pie/Donut)
-          </h3>
-          <DonutChart data={region_distribution} />
+      {/* ─── ECOSYSTEM OVERVIEW VIEW ───────────────────────────── */}
+      {(viewMode === "overview" || viewMode === "incubators") && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+          
+          {/* SVG Donut Chart */}
+          <div className="glass-card chart-card">
+            <h3>
+              <PieIcon size={16} style={{ color: "var(--primary)", marginRight: 4 }} />
+              Incubator Region Share (Pie/Donut)
+            </h3>
+            <DonutChart data={region_distribution} />
+          </div>
+
+          {/* SVG Line Graph */}
+          <div className="glass-card chart-card">
+            <h3>
+              <TrendingUp size={16} style={{ color: "var(--accent)", marginRight: 4 }} />
+              Outreach Activity & Response Trends
+            </h3>
+            <LineChart leads={leads} />
+          </div>
+
+          {/* Conversion Funnel */}
+          <div className="glass-card chart-card">
+            <h3>
+              <BarChart2 size={16} style={{ color: "#F59E0B", marginRight: 4 }} />
+              Campaign Conversion Funnel & Ratios
+            </h3>
+            <FunnelWidget leads={leads} />
+          </div>
+
         </div>
+      )}
 
-        {/* SVG Line Graph */}
-        <div className="glass-card chart-card">
-          <h3>
-            <TrendingUp size={16} style={{ color: "var(--accent)", marginRight: 4 }} />
-            Outreach Activity & Response Trends
-          </h3>
-          <LineChart leads={leads} />
+      {/* ─── INCUBATORS DEEP DIVE VIEW ─────────────────────────── */}
+      {(viewMode === "overview" || viewMode === "incubators") && (
+        <div className="dashboard-grid">
+          {/* Sector Distribution */}
+          <div className="glass-card chart-card">
+            <h3>
+              <TrendingUp size={16} style={{ color: "var(--info)" }} />
+              Top Incubator Sectors
+            </h3>
+            <BarChart
+              data={sector_distribution?.slice(0, 8)}
+              labelKey="sector"
+              maxVal={maxSectorVal}
+              fillStyle={{ background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}
+            />
+          </div>
+
+          {/* Organization Type Distribution */}
+          <div className="glass-card chart-card">
+            <h3>
+              <Building2 size={16} style={{ color: "var(--primary)" }} />
+              Incubator Organization Types
+            </h3>
+            <BarChart
+              data={org_type_distribution}
+              labelKey="organization_type"
+              valueKey="count"
+              maxVal={org_type_distribution?.length > 0 ? org_type_distribution[0].count : 1}
+              fillStyle={{ background: "linear-gradient(90deg, #10B981, #34D399)" }}
+            />
+          </div>
+
+          {/* Regional Distribution */}
+          <div className="glass-card chart-card">
+            <h3>
+              <Globe size={16} style={{ color: "var(--accent)" }} />
+              Regional Distribution
+            </h3>
+            <BarChart
+              data={region_distribution}
+              labelKey="region"
+              maxVal={maxRegionVal}
+              fillStyle={{ background: "linear-gradient(90deg, var(--primary), #34D399)" }}
+            />
+          </div>
+
+          {/* State Distribution */}
+          <div className="glass-card chart-card">
+            <h3>
+              <MapPin size={16} style={{ color: "var(--warning)" }} />
+              Incubator Density by State
+            </h3>
+            <BarChart
+              data={state_distribution?.slice(0, 8)}
+              labelKey="state"
+              maxVal={maxStateVal}
+              fillStyle={{ background: "linear-gradient(90deg, #F59E0B, #FCD34D)" }}
+            />
+          </div>
+
+          {/* Top Incubators Leaderboard */}
+          {top_incubators && top_incubators.length > 0 && (
+            <TopIncubatorsWidget data={top_incubators} />
+          )}
         </div>
+      )}
 
-        {/* Conversion Funnel */}
-        <div className="glass-card chart-card">
-          <h3>
-            <BarChart2 size={16} style={{ color: "#F59E0B", marginRight: 4 }} />
-            Campaign Conversion Funnel & Ratios
-          </h3>
-          <FunnelWidget leads={leads} />
+      {/* ─── STARTUPS DEEP DIVE VIEW ───────────────────────────── */}
+      {(viewMode === "overview" || viewMode === "startups") && (
+        <div style={{ marginTop: viewMode === "startups" ? "0" : "10px" }}>
+          
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>
+              🚀 Detailed Startup Analysis
+            </h3>
+            <span style={{ fontSize: "0.75rem", background: "var(--primary-light)", color: "var(--primary)", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+              {totalStartupsCount} Startups
+            </span>
+          </div>
+
+          <div className="dashboard-grid">
+            
+            {/* Startup Sector Breakdown */}
+            <div className="glass-card chart-card">
+              <h3>
+                <Layers size={16} style={{ color: "#3B82F6" }} />
+                Startup Verticals & Sectors
+              </h3>
+              <BarChart
+                data={startupSectors.slice(0, 8)}
+                labelKey="sector"
+                maxVal={maxStartupSectorVal || 1}
+                fillStyle={{ background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}
+              />
+            </div>
+
+            {/* Startup Funding Stages */}
+            <StartupStagesWidget data={startupStages} />
+
+            {/* Startup HQ Cities */}
+            <div className="glass-card chart-card">
+              <h3>
+                <Building2 size={16} style={{ color: "#F59E0B" }} />
+                Top Startup Cities / Hubs
+              </h3>
+              <BarChart
+                data={startupCities}
+                labelKey="hq_city"
+                maxVal={maxStartupCityVal || 1}
+                fillStyle={{ background: "linear-gradient(90deg, #F59E0B, #FCD34D)" }}
+              />
+            </div>
+
+            {/* Evaluation & Cohort Score Breakdown */}
+            <div className="glass-card chart-card">
+              <h3>
+                <Target size={16} style={{ color: "#8B5CF6" }} />
+                Startup Evaluation & Readiness
+              </h3>
+              <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-surface)", padding: "12px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+                  <div>
+                    <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 600 }}>Avg Evaluation Readiness</div>
+                    <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--primary)" }}>{totals.avg_confidence_score || 0} / 100</div>
+                  </div>
+                  <Star size={32} color="var(--primary)" />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-surface)", padding: "12px 16px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+                  <div>
+                    <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 600 }}>Incubator Associated</div>
+                    <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#3B82F6" }}>{totals.incubated_startups || 0} Startups</div>
+                  </div>
+                  <ShieldCheck size={32} color="#3B82F6" />
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
+      )}
 
-      </div>
-
-      {/* Standard Charts Grid */}
-      <div className="dashboard-grid">
-        {/* Sector Distribution */}
-        <div className="glass-card chart-card">
-          <h3>
-            <TrendingUp size={16} style={{ color: "var(--info)" }} />
-            Top Incubator Sectors
-          </h3>
-          <BarChart
-            data={sector_distribution?.slice(0, 8)}
-            labelKey="sector"
-            maxVal={maxSectorVal}
-            fillStyle={{ background: "linear-gradient(90deg, #3B82F6, #60A5FA)" }}
-          />
-        </div>
-
-        {/* Regional Distribution */}
-        <div className="glass-card chart-card">
-          <h3>
-            <Globe size={16} style={{ color: "var(--accent)" }} />
-            Regional Distribution
-          </h3>
-          <BarChart
-            data={region_distribution}
-            labelKey="region"
-            maxVal={maxRegionVal}
-            fillStyle={{ background: "linear-gradient(90deg, var(--primary), #34D399)" }}
-          />
-        </div>
-
-        {/* State Distribution */}
-        <div className="glass-card chart-card">
-          <h3>
-            <MapPin size={16} style={{ color: "var(--warning)" }} />
-            Incubator Density by State
-          </h3>
-          <BarChart
-            data={state_distribution?.slice(0, 8)}
-            labelKey="state"
-            maxVal={maxStateVal}
-            fillStyle={{ background: "linear-gradient(90deg, #F59E0B, #FCD34D)" }}
-          />
-        </div>
-
-        {/* Top Incubators */}
-        {top_incubators && top_incubators.length > 0 && (
-          <TopIncubatorsWidget data={top_incubators} />
-        )}
-      </div>
     </div>
   );
 }

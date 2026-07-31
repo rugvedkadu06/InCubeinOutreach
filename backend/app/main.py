@@ -1,13 +1,34 @@
 import os
+import sys
 import json
 import zipfile
 import io
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse, FileResponse
 from dotenv import load_dotenv
 
-load_dotenv()
+# Resolve base directory — works both in dev and when bundled as .exe (PyInstaller)
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe — static files are bundled at _MEIPASS/app/static
+    BASE_DIR = Path(sys._MEIPASS) / "app"
+    APP_DATA_DIR = Path(sys.executable).parent
+else:
+    # Dev mode — main.py lives at backend/app/main.py
+    BASE_DIR = Path(__file__).resolve().parent
+    APP_DATA_DIR = BASE_DIR.parent
+
+print(f"[InCubein] BASE_DIR={BASE_DIR}", flush=True)
+print(f"[InCubein] APP_DATA_DIR={APP_DATA_DIR}", flush=True)
+
+# Load .env from app data dir (next to .exe) or from backend folder in dev
+env_path = APP_DATA_DIR / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    load_dotenv()
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -58,6 +79,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+ 
+
 
 class PipelineRunResponse(BaseModel):
     status: str
@@ -121,7 +145,9 @@ def get_incubators(
     state: Optional[str] = None,
     city: Optional[str] = None,
     sector: Optional[str] = None,
-    region: Optional[str] = None
+    region: Optional[str] = None,
+    page: Optional[int] = None,
+    limit: Optional[int] = None
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -157,7 +183,7 @@ def get_incubators(
         for json_field in ["incubation_programs", "acceleration_programs", "lab_facilities", "focus_areas"]:
             if row[json_field]:
                 try:
-                    row[json_field] = json.loads(row[json_field])
+                    row[json_field] = json.loads(row[json_field]) if isinstance(row[json_field], str) else row[json_field]
                 except:
                     row[json_field] = []
                     
@@ -165,6 +191,21 @@ def get_incubators(
         rows = [r for r in rows if r["region"].lower() == region.lower()]
         
     conn.close()
+
+    if page is not None and limit is not None and limit > 0:
+        total = len(rows)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_rows = rows[start:end]
+        import math
+        return {
+            "items": paginated_rows,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": math.ceil(total / limit) if total > 0 else 1
+        }
+
     return rows
 
 @app.get("/api/startups")
@@ -173,7 +214,9 @@ def get_startups(
     sector: Optional[str] = None,
     funding_stage: Optional[str] = None,
     hq_city: Optional[str] = None,
-    incubator_id: Optional[str] = None
+    incubator_id: Optional[str] = None,
+    page: Optional[int] = None,
+    limit: Optional[int] = None
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -205,11 +248,26 @@ def get_startups(
     for row in rows:
         if row["founders"]:
             try:
-                row["founders"] = json.loads(row["founders"])
+                row["founders"] = json.loads(row["founders"]) if isinstance(row["founders"], str) else row["founders"]
             except:
                 row["founders"] = []
                 
     conn.close()
+
+    if page is not None and limit is not None and limit > 0:
+        total = len(rows)
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_rows = rows[start:end]
+        import math
+        return {
+            "items": paginated_rows,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": math.ceil(total / limit) if total > 0 else 1
+        }
+
     return rows
 
 @app.get("/api/graph")
@@ -221,7 +279,7 @@ def get_analytics():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Simple totals
+    # --- Incubator Totals & Distributions ---
     cursor.execute("SELECT COUNT(*) FROM incubators")
     total_incubators = cursor.fetchone()[0]
     
@@ -230,7 +288,11 @@ def get_analytics():
     
     cursor.execute("SELECT COUNT(DISTINCT city) FROM incubators WHERE city IS NOT NULL AND city != ''")
     cities_covered = cursor.fetchone()[0]
-    
+
+    # Organization type distribution (Academic, Private, Government, PPP)
+    cursor.execute("SELECT organization_type, COUNT(*) as count FROM incubators WHERE organization_type IS NOT NULL AND organization_type != '' GROUP BY organization_type ORDER BY count DESC")
+    org_type_distribution = [dict(row) for row in cursor.fetchall()]
+
     # State-wise distribution
     cursor.execute("SELECT state, COUNT(*) as count FROM incubators WHERE state IS NOT NULL AND state != '' GROUP BY state ORDER BY count DESC")
     state_distribution = [dict(row) for row in cursor.fetchall()]
@@ -238,17 +300,37 @@ def get_analytics():
     # City-wise distribution (Top hubs)
     cursor.execute("SELECT city, COUNT(*) as count FROM incubators WHERE city IS NOT NULL AND city != '' GROUP BY city ORDER BY count DESC LIMIT 8")
     top_hubs = [dict(row) for row in cursor.fetchall()]
-    
+
+    # Top Ranked Incubators Leaderboard
+    cursor.execute("SELECT name, city, state, startup_count, focus_areas FROM incubators WHERE name IS NOT NULL ORDER BY startup_count DESC LIMIT 8")
+    top_incubators_raw = [dict(row) for row in cursor.fetchall()]
+    top_incubators = []
+    for inc in top_incubators_raw:
+        fa = inc.get("focus_areas")
+        if fa and isinstance(fa, str):
+            try:
+                fa = json.loads(fa)
+            except:
+                fa = []
+        top_incubators.append({
+            "name": inc.get("name"),
+            "city": inc.get("city"),
+            "state": inc.get("state"),
+            "startups_count": inc.get("startup_count", 0),
+            "focus_areas": fa if isinstance(fa, list) else []
+        })
+
     # Sector distribution from focus areas of incubators
     sector_counts = {}
     cursor.execute("SELECT focus_areas FROM incubators")
     for row in cursor.fetchall():
         if row[0]:
             try:
-                areas = json.loads(row[0])
-                for area in areas:
-                    if area:
-                        sector_counts[area] = sector_counts.get(area, 0) + 1
+                areas = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                if isinstance(areas, list):
+                    for area in areas:
+                        if area:
+                            sector_counts[area] = sector_counts.get(area, 0) + 1
             except:
                 pass
     
@@ -273,38 +355,82 @@ def get_analytics():
     ]
     region_distribution.sort(key=lambda x: x["count"], reverse=True)
 
-    # Fetch unique filters for dropdowns
+    # --- Startup Totals & Detailed Analysis ---
+    cursor.execute("SELECT COUNT(*) FROM startups")
+    total_startups = cursor.fetchone()[0]
+
+    # Startup Sector Distribution
+    cursor.execute("SELECT sector, COUNT(*) as count FROM startups WHERE sector IS NOT NULL AND sector != '' GROUP BY sector ORDER BY count DESC")
+    startup_sector_distribution = [dict(row) for row in cursor.fetchall()]
+
+    # Startup Funding Stage Distribution
+    cursor.execute("SELECT funding_stage, COUNT(*) as count FROM startups WHERE funding_stage IS NOT NULL AND funding_stage != '' GROUP BY funding_stage ORDER BY count DESC")
+    startup_stage_distribution = [dict(row) for row in cursor.fetchall()]
+
+    # Startup HQ City Distribution
+    cursor.execute("SELECT hq_city, COUNT(*) as count FROM startups WHERE hq_city IS NOT NULL AND hq_city != '' GROUP BY hq_city ORDER BY count DESC LIMIT 8")
+    startup_city_distribution = [dict(row) for row in cursor.fetchall()]
+
+    # Incubated vs Standalone Startups
+    cursor.execute("SELECT COUNT(*) FROM startups WHERE incubator_id IS NOT NULL AND incubator_id != ''")
+    incubated_startups_count = cursor.fetchone()[0]
+
+    # Average Confidence Score for Evaluated Startups
+    cursor.execute("SELECT confidence_score FROM startups WHERE confidence_score IS NOT NULL")
+    scores = []
+    for r in cursor.fetchall():
+        try:
+            val = float(r[0])
+            scores.append(val)
+        except:
+            pass
+    avg_confidence = round(sum(scores) / len(scores), 1) if scores else 0.0
+
+    # Unique filters for dropdowns
     cursor.execute("SELECT DISTINCT state FROM incubators WHERE state IS NOT NULL AND state != '' ORDER BY state")
     unique_states = [r[0] for r in cursor.fetchall()]
     
     cursor.execute("SELECT DISTINCT city FROM incubators WHERE city IS NOT NULL AND city != '' ORDER BY city")
     unique_cities = [r[0] for r in cursor.fetchall()]
     
-    # Collect unique focus areas
     cursor.execute("SELECT focus_areas FROM incubators")
     all_areas = set()
     for row in cursor.fetchall():
         if row[0]:
             try:
-                all_areas.update(json.loads(row[0]))
+                areas = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                if isinstance(areas, list):
+                    all_areas.update(areas)
             except:
                 pass
     unique_focus_areas = sorted(list(all_areas))
 
     conn.close()
+
     return {
         "totals": {
             "incubators": total_incubators,
+            "startups": total_startups,
             "states": states_covered,
             "cities": cities_covered,
-            "sectors": sectors_supported
+            "sectors": sectors_supported,
+            "incubated_startups": incubated_startups_count,
+            "avg_confidence_score": avg_confidence
         },
         "state_distribution": state_distribution,
         "region_distribution": region_distribution,
+        "org_type_distribution": org_type_distribution,
         "top_hubs": top_hubs,
         "sector_distribution": sector_distribution,
-        "top_incubators": [],
-        "funding_stages": [],
+        "top_incubators": top_incubators,
+        "startup_analytics": {
+            "total_startups": total_startups,
+            "sector_distribution": startup_sector_distribution,
+            "stage_distribution": startup_stage_distribution,
+            "city_distribution": startup_city_distribution,
+            "incubated_count": incubated_startups_count,
+            "avg_confidence": avg_confidence
+        },
         "filters": {
             "states": unique_states,
             "cities": unique_cities,
@@ -3257,6 +3383,26 @@ def clear_startups_directory():
         return {"status": "success", "message": f"Successfully cleared {res.deleted_count} startups from the directory."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Serve Built React Frontend (production / exe mode) ---
+_static_dir = BASE_DIR / "static"
+if _static_dir.exists() and _static_dir.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_static_dir / "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    def serve_index():
+        return FileResponse(str(_static_dir / "index.html"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        # Let API routes pass through; serve index.html for all frontend routes
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        file_path = _static_dir / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(_static_dir / "index.html"))
+
 
 
 

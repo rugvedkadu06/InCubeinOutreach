@@ -1,0 +1,42 @@
+# Environment & Secrets
+.env
+*.env
+backend/.env
+frontend/.env
+*.pem
+*.key
+token.json
+app/token.json
+backend/app/token.json
+
+# Databases & Cache
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+backend/*.sqlite
+backend/scratch/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node.js
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+
+# Build Outputs & Packaging
+dist/
+build/
+frontend/dist/
+*.exe
+*.spec
+installer.iss
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
