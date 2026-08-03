@@ -247,6 +247,40 @@ Incubein Foundation – RTMNU Business Incubation Centre
 Nagpur, Maharashtra
 Email: teamincubein@gmail.com
 Website: www.incubein.com`
+  },
+  startup_seed_rejection: {
+    target: "startups",
+    name: "Seed Support Cohort – Rejection + Pre-Incubation Invite",
+    subject: "Regarding Your Application to the Incubein Startup Seed Support Cohort",
+    cc: "teamincubein@gmail.com",
+    body: `Dear {StartupName},
+
+Greetings from Incubein Foundation – RTM Nagpur University Business Incubation Centre.
+
+Thank you for applying to our Startup Seed Support Cohort and for sharing your entrepreneurial journey with us. We truly appreciate the time and effort you invested in your application.
+
+We received an overwhelming response from startups across the country, and after a comprehensive evaluation process, this is to inform you that your application has not been shortlisted for the Second Round of the Seed Support Screening.
+
+However, we strongly believe that your startup has promising potential and would benefit from structured support to further strengthen its foundation before pursuing funding opportunities. With this in mind, we are pleased to invite you to join the Incubein Foundation Pre-Incubation Program.
+
+Through our Pre-Incubation Program, you will receive:
+1. Dedicated mentorship and one-on-one guidance
+2. Startup Toolkit with practical resources and templates
+3. Business model refinement and validation support
+4. Go-to-market and growth strategy guidance
+5. Pitch deck and investor readiness support
+6. Access to our startup ecosystem, expert network, and learning sessions
+7. Guidance on government schemes, grants, and funding opportunities
+
+Our objective is to work closely with you, strengthen your startup, and help you become investment and incubation ready. Once your venture reaches the required milestones, it will be eligible for consideration under our Incubation Program and various funding opportunities facilitated through the Incubein ecosystem.
+
+If you are interested in joining the Pre-Incubation Program, kindly acknowledge this mail, and our team will forward you further process.
+
+We sincerely appreciate your interest in Incubein Foundation and look forward to supporting your entrepreneurial journey towards building a scalable and impactful venture.
+
+Warm regards,
+Team Incubein Foundation
+RTM Nagpur University Business Incubation Centre`
   }
 };
 
@@ -895,7 +929,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
       payload = {
         lead_id: leadId,
         subject: compiledSubject,
-        body: compiledBody
+        body: compiledBody,
+        ...(template.cc ? { cc: template.cc } : {})
       };
     }
     
@@ -942,6 +977,7 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
     if (template) {
       payload.subject = template.subject;
       payload.body = template.body;
+      if (template.cc) payload.cc = template.cc;
     }
 
     try {

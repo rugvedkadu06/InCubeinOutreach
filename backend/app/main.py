@@ -1951,6 +1951,7 @@ class MassSendRequest(BaseModel):
     target_type: str
     subject: Optional[str] = None
     body: Optional[str] = None
+    cc: Optional[str] = None
 
 @app.post("/api/outreach/mass-send")
 def trigger_mass_send(req: MassSendRequest):
@@ -2011,6 +2012,8 @@ def trigger_mass_send(req: MassSendRequest):
                 msg["Subject"] = subject_to_send
                 msg["From"] = sender_email
                 msg["To"] = lead["email"]
+                if req.cc:
+                    msg["Cc"] = req.cc
                 msg.attach(MIMEText(body_to_send, "plain"))
                 
                 port = int(smtp_port)
@@ -2020,7 +2023,10 @@ def trigger_mass_send(req: MassSendRequest):
                     server = smtplib.SMTP(smtp_host, port, timeout=10)
                     server.starttls()
                 server.login(smtp_user, smtp_pass)
-                server.sendmail(sender_email, [lead["email"]], msg.as_string())
+                recipients = [lead["email"]]
+                if req.cc:
+                    recipients += [c.strip() for c in req.cc.split(",") if c.strip()]
+                server.sendmail(sender_email, recipients, msg.as_string())
                 server.quit()
                 email_sent = True
                 sent_count += 1
