@@ -3032,27 +3032,49 @@ def get_oauth_status():
 class OutreachConfig(BaseModel):
     sync_interval: int
     followup_delay: Optional[int] = 120
+    scanning_paused: Optional[bool] = None
+    followups_paused: Optional[bool] = None
 
 IMAP_SYNC_INTERVAL = 30  # background IMAP check interval in seconds. 0 or negative means manual only.
 FOLLOWUP_DELAY = 120
+SCANNING_PAUSED = False
+FOLLOWUPS_PAUSED = False
 
 @app.get("/api/outreach/config")
 def get_outreach_config():
-    global IMAP_SYNC_INTERVAL, FOLLOWUP_DELAY
-    return {"sync_interval": IMAP_SYNC_INTERVAL, "followup_delay": FOLLOWUP_DELAY}
+    global IMAP_SYNC_INTERVAL, FOLLOWUP_DELAY, SCANNING_PAUSED, FOLLOWUPS_PAUSED
+    return {
+        "sync_interval": IMAP_SYNC_INTERVAL,
+        "followup_delay": FOLLOWUP_DELAY,
+        "scanning_paused": SCANNING_PAUSED,
+        "followups_paused": FOLLOWUPS_PAUSED,
+    }
 
 @app.post("/api/outreach/config")
 def update_outreach_config(cfg: OutreachConfig):
-    global IMAP_SYNC_INTERVAL, FOLLOWUP_DELAY
+    global IMAP_SYNC_INTERVAL, FOLLOWUP_DELAY, SCANNING_PAUSED, FOLLOWUPS_PAUSED
     IMAP_SYNC_INTERVAL = cfg.sync_interval
     if cfg.followup_delay is not None:
         FOLLOWUP_DELAY = cfg.followup_delay
-    print(f"Updated IMAP sync interval to: {IMAP_SYNC_INTERVAL} seconds, followup delay to: {FOLLOWUP_DELAY} seconds")
-    return {"status": "success", "sync_interval": IMAP_SYNC_INTERVAL, "followup_delay": FOLLOWUP_DELAY}
+    if cfg.scanning_paused is not None:
+        SCANNING_PAUSED = cfg.scanning_paused
+    if cfg.followups_paused is not None:
+        FOLLOWUPS_PAUSED = cfg.followups_paused
+    print(f"Updated outreach config: IMAP sync={IMAP_SYNC_INTERVAL}s, followup delay={FOLLOWUP_DELAY}s, scanning_paused={SCANNING_PAUSED}, followups_paused={FOLLOWUPS_PAUSED}")
+    return {
+        "status": "success",
+        "sync_interval": IMAP_SYNC_INTERVAL,
+        "followup_delay": FOLLOWUP_DELAY,
+        "scanning_paused": SCANNING_PAUSED,
+        "followups_paused": FOLLOWUPS_PAUSED,
+    }
 
 @app.post("/api/outreach/check-replies")
 def trigger_check_replies():
     from datetime import datetime
+    global SCANNING_PAUSED
+    if SCANNING_PAUSED:
+        return {"status": "paused", "checked_at": datetime.now().isoformat(), "new_replies": [], "message": "Inbox scanning is permanently paused. Resume scanning in the Outreach Automation controls to proceed."}
     replies = check_imap_replies_sync()
     return {"status": "success", "checked_at": datetime.now().isoformat(), "new_replies": replies}
 
