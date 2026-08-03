@@ -1385,12 +1385,46 @@ Database Context:
         "message": markdown_result
     }
 
+def get_smtp_config(account: Optional[str] = None) -> dict:
+    if account and account.strip() not in ("", "default"):
+        suffix = account.strip()
+        smtp_host = os.environ.get(f"SMTP_HOST{suffix}")
+        smtp_port = os.environ.get(f"SMTP_PORT{suffix}", "587")
+        smtp_user = os.environ.get(f"SMTP_USER{suffix}")
+        smtp_pass = os.environ.get(f"SMTP_PASS{suffix}")
+        sender_email = os.environ.get(f"SENDER_EMAIL{suffix}") or smtp_user
+    else:
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_port = os.environ.get("SMTP_PORT", "587")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASS")
+        sender_email = os.environ.get("SENDER_EMAIL") or smtp_user
+
+    if smtp_user:
+        smtp_user = smtp_user.strip().strip('"').strip("'")
+    if smtp_pass:
+        smtp_pass = smtp_pass.strip().strip('"').strip("'")
+    if sender_email:
+        sender_email = sender_email.strip().strip('"').strip("'")
+
+    is_smtp_ready = bool(smtp_host and smtp_user and smtp_pass and "your_email" not in (smtp_user or ""))
+
+    return {
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "smtp_user": smtp_user,
+        "smtp_pass": smtp_pass,
+        "sender_email": sender_email or "no-reply@incubein.com",
+        "is_smtp_ready": is_smtp_ready,
+    }
+
 # Pydantic models for outreach
 class OutreachEmailRequest(BaseModel):
     lead_id: str
     subject: Optional[str] = None
     body: Optional[str] = None
     cc: Optional[str] = None
+    mail_account: Optional[str] = None
 
 
 class OutreachReplyRequest(BaseModel):
@@ -1743,29 +1777,28 @@ def trigger_outreach_email(req: OutreachEmailRequest):
         conn.close()
         raise HTTPException(status_code=404, detail="Lead not found")
         
-    # Send a real outreach invite email if SMTP is configured
-    smtp_host = os.environ.get("SMTP_HOST")
-    smtp_port = os.environ.get("SMTP_PORT", "587")
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@incubein.com"
-    
-    is_smtp_ready = smtp_host and smtp_user and smtp_pass and "your_email" not in smtp_user
-    
+    smtp_cfg = get_smtp_config(req.mail_account)
+    smtp_host = smtp_cfg["smtp_host"]
+    smtp_port = smtp_cfg["smtp_port"]
+    smtp_user = smtp_cfg["smtp_user"]
+    smtp_pass = smtp_cfg["smtp_pass"]
+    sender_email = smtp_cfg["sender_email"]
+    is_smtp_ready = smtp_cfg["is_smtp_ready"]
+
     email_sent_successfully = False
     if is_smtp_ready:
         try:
             import smtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
-            
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = req.subject or "Introduction to Incubein Foundation"
             msg["From"] = sender_email
             msg["To"] = lead["email"]
             if req.cc:
                 msg["Cc"] = req.cc
-            
+
             lead_name = lead["incubator_name"]
             is_startup = lead["incubator_id"] == "incubein_cohort"
             if is_startup:
@@ -1811,7 +1844,7 @@ Website: www.incubein.com"""
 
             body_text = req.body or default_body
             msg.attach(MIMEText(body_text, "plain"))
-            
+
             port = int(smtp_port)
             if port == 465:
                 server = smtplib.SMTP_SSL(smtp_host, port, timeout=10)
@@ -1952,6 +1985,7 @@ class MassSendRequest(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
     cc: Optional[str] = None
+    mail_account: Optional[str] = None
 
 @app.post("/api/outreach/mass-send")
 def trigger_mass_send(req: MassSendRequest):
@@ -1971,14 +2005,14 @@ def trigger_mass_send(req: MassSendRequest):
         conn.close()
         return {"status": "success", "message": f"No draft leads found for {req.target_type}.", "sent_count": 0}
         
-    # Get SMTP configuration
-    smtp_host = os.environ.get("SMTP_HOST")
-    smtp_port = os.environ.get("SMTP_PORT", "587")
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-    sender_email = os.environ.get("SENDER_EMAIL") or smtp_user or "no-reply@incubein.com"
-    is_smtp_ready = smtp_host and smtp_user and smtp_pass and "your_email" not in smtp_user
-    
+    smtp_cfg = get_smtp_config(req.mail_account)
+    smtp_host = smtp_cfg["smtp_host"]
+    smtp_port = smtp_cfg["smtp_port"]
+    smtp_user = smtp_cfg["smtp_user"]
+    smtp_pass = smtp_cfg["smtp_pass"]
+    sender_email = smtp_cfg["sender_email"]
+    is_smtp_ready = smtp_cfg["is_smtp_ready"]
+
     sent_count = 0
     simulated_count = 0
     

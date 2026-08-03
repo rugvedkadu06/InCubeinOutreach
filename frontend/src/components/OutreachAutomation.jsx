@@ -305,6 +305,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
     }
   }, [targetType, selectedTemplateKey]);
 
+  const [selectedMailAccount, setSelectedMailAccount] = useState("default");
+
   const [meetings, setMeetings] = useState([]);
   const [incubators, setIncubators] = useState([]);
   const [externalEvents, setExternalEvents] = useState([]);
@@ -930,7 +932,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
         lead_id: leadId,
         subject: compiledSubject,
         body: compiledBody,
-        ...(template.cc ? { cc: template.cc } : {})
+        ...(template.cc ? { cc: template.cc } : {}),
+        mail_account: selectedMailAccount
       };
     }
     
@@ -970,7 +973,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
     addLog("OUTREACH", `Initializing mass dispatch for ${draftLeads.length} draft leads...`);
     
     let payload = {
-      target_type: targetType
+      target_type: targetType,
+      mail_account: selectedMailAccount
     };
 
     const template = PREDEFINED_TEMPLATES[selectedTemplateKey];
@@ -1445,6 +1449,18 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                       .map(([k, v]) => (
                         <option key={k} value={k}>{v.name}</option>
                       ))}
+                  </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#000000", whiteSpace: "nowrap", fontWeight: "600" }}>Mail From:</span>
+                  <select 
+                    className="form-input" 
+                    style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", width: "260px", height: "32px", color: "black", background: "#f8fafc", border: "1px solid var(--border-color)", borderRadius: "4px", margin: 0 }}
+                    value={selectedMailAccount}
+                    onChange={(e) => setSelectedMailAccount(e.target.value)}
+                  >
+                    <option value="default">Incubein Connect (incubeinconnect@gmail.com)</option>
+                    <option value="1">Incubein Team (incubeinteam@gmail.com)</option>
                   </select>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
