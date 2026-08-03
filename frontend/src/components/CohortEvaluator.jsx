@@ -24,6 +24,7 @@ import {
 import { toast } from "react-toastify";
 
 export default function CohortEvaluator() {
+  const [entityMode, setEntityMode] = useState("startup"); // "startup" | "incubator"
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -47,7 +48,7 @@ export default function CohortEvaluator() {
   const fetchApplications = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/incubein/applications");
+      const res = await fetch(`/api/incubein/applications?entity_type=${entityMode}`);
       if (res.ok) {
         const data = await res.json();
         setApplications(data);
@@ -67,7 +68,34 @@ export default function CohortEvaluator() {
 
   useEffect(() => {
     fetchApplications();
-  }, []);
+  }, [entityMode]);
+
+  const handleExportToIncubatorDb = async (all = false) => {
+    const ids = all ? [] : checkedIds;
+    if (!all && ids.length === 0) {
+      toast.warning("Please select at least one incubator.");
+      return;
+    }
+
+    setExportingDb(true);
+    try {
+      const res = await fetch("/api/incubein/incubator/add-to-db", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app_ids: ids, all }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.detail || "Failed to add incubators to database.");
+      }
+    } catch (e) {
+      toast.error("Network error.");
+    } finally {
+      setExportingDb(false);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -75,6 +103,7 @@ export default function CohortEvaluator() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("entity_type", entityMode);
 
     setUploading(true);
     try {
@@ -219,6 +248,115 @@ export default function CohortEvaluator() {
     return 20;
   };
 
+  const getStartupOrIncubatorName = (app) => {
+    if (!app) return "N/A";
+    if (app.startup_name && typeof app.startup_name === "string" && !app.startup_name.includes("@") && app.startup_name.trim() && app.startup_name !== "N/A") {
+      return app.startup_name.trim();
+    }
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (!v || typeof v !== "string" || v.includes("@") || !v.trim() || v === "N/A") continue;
+        const lowerK = k.toLowerCase();
+        if (["startup", "incubator", "company", "hub", "center", "organization", "tbi", "entity", "title"].some(term => lowerK.includes(term))) {
+          return v.trim();
+        }
+      }
+    }
+    return getNameValue(app);
+  };
+
+  const getFounderName = (app) => {
+    if (!app) return "N/A";
+    if (app.name && typeof app.name === "string" && !app.name.includes("@") && app.name.trim() && app.name !== "N/A") {
+      return app.name.trim();
+    }
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (!v || typeof v !== "string" || v.includes("@") || !v.trim() || v === "N/A") continue;
+        const lowerK = k.toLowerCase();
+        if (["founder", "applicant", "owner", "contact person", "person", "first name", "full name"].some(term => lowerK.includes(term))) {
+          return v.trim();
+        }
+      }
+    }
+    return getNameValue(app);
+  };
+
+  const getEmailValue = (app) => {
+    if (!app) return "N/A";
+    if (app.email && typeof app.email === "string" && app.email.includes("@") && app.email !== "N/A") return app.email.trim();
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (v && typeof v === "string" && v.includes("@") && v.includes(".") && !v.startsWith("http")) {
+          return v.trim();
+        }
+      }
+    }
+    if (app.startup_name && typeof app.startup_name === "string" && app.startup_name.includes("@")) return app.startup_name.trim();
+    if (app.name && typeof app.name === "string" && app.name.includes("@")) return app.name.trim();
+    return "N/A";
+  };
+
+  const getNameValue = (app) => {
+    if (!app) return "N/A";
+    if (app.name && typeof app.name === "string" && !app.name.includes("@") && app.name.trim() && app.name !== "N/A") {
+      return app.name.trim();
+    }
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (!v || typeof v !== "string" || v.includes("@") || !v.trim() || v === "N/A") continue;
+        const lowerK = k.toLowerCase();
+        if (["name", "founder", "applicant", "owner", "contact", "title", "incubator", "company", "startup"].some(term => lowerK.includes(term))) {
+          return v.trim();
+        }
+      }
+    }
+    if (app.startup_name && typeof app.startup_name === "string" && !app.startup_name.includes("@") && app.startup_name.trim()) {
+      return app.startup_name.trim();
+    }
+    const email = getEmailValue(app);
+    if (email && email.includes("@")) {
+      const prefix = email.split("@")[0];
+      const cleaned = prefix.replace(/\d+/g, "").replace(/[._-]/g, " ").trim();
+      if (cleaned) {
+        return cleaned.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+      return prefix;
+    }
+    return app.startup_name || "N/A";
+  };
+
+  const getMobileValue = (app) => {
+    if (!app) return "N/A";
+    if (app.mobile && typeof app.mobile === "string" && app.mobile.trim() && app.mobile !== "N/A") return app.mobile.trim();
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (!v || typeof v !== "string") continue;
+        const lowerK = k.toLowerCase();
+        if (["mobile", "phone", "contact", "cell", "number"].some(term => lowerK.includes(term)) || /^[+]?\d{10,12}$/.test(v.replace(/[\s-]/g, ""))) {
+          return v.trim();
+        }
+      }
+    }
+    return "N/A";
+  };
+
+  const getAddressValue = (app) => {
+    if (!app) return "N/A";
+    if (app.address && typeof app.address === "string" && app.address.trim() && app.address !== "N/A") return app.address.trim();
+    if (app.city_state && typeof app.city_state === "string" && app.city_state.trim() && app.city_state !== "N/A") return app.city_state.trim();
+    if (app.raw_data) {
+      for (const [k, v] of Object.entries(app.raw_data)) {
+        if (!v || typeof v !== "string") continue;
+        const lowerK = k.toLowerCase();
+        if (["address", "location", "city", "state", "region"].some(term => lowerK.includes(term))) {
+          return v.trim();
+        }
+      }
+    }
+    return "N/A";
+  };
+
   const formatCurrency = (val) => {
     if (!val) return "₹0";
     if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
@@ -258,11 +396,29 @@ export default function CohortEvaluator() {
         gap: "16px"
       }}>
         <div>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+            <button
+              onClick={() => { setEntityMode("startup"); setCheckedIds([]); setSelectedApp(null); }}
+              className={`btn ${entityMode === "startup" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.8rem", padding: "4px 12px" }}
+            >
+              🚀 Startup Cohort Evaluator
+            </button>
+            <button
+              onClick={() => { setEntityMode("incubator"); setCheckedIds([]); setSelectedApp(null); }}
+              className={`btn ${entityMode === "incubator" ? "btn-primary" : "btn-secondary"}`}
+              style={{ fontSize: "0.8rem", padding: "4px 12px" }}
+            >
+              🏢 Incubator Cohort Evaluator
+            </button>
+          </div>
           <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--text-primary)" }}>
-            Cohort Evaluator & Ranking
+            {entityMode === "incubator" ? "Incubator Cohort Evaluator & Scoring" : "Startup Cohort Evaluator & Ranking"}
           </h2>
           <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-            Upload applications, score automatically, run similarity audits, and add leads to campaigns.
+            {entityMode === "incubator"
+              ? "Upload incubator data Excel, evaluate infrastructure, programs, regional reach & governance scores."
+              : "Upload startup applications, score automatically, run similarity audits, and add leads to campaigns."}
           </p>
         </div>
 
@@ -518,7 +674,7 @@ export default function CohortEvaluator() {
                             <div style={{ display: "flex", flexDirection: "column" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                 <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                                  {app.startup_name}
+                                  {getStartupOrIncubatorName(app)}
                                 </span>
                                 {app.rank <= 3 && (
                                   <span style={{
@@ -536,8 +692,8 @@ export default function CohortEvaluator() {
                                   </span>
                                 )}
                               </div>
-                              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                {app.name}
+                              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "220px" }} title={`${getFounderName(app)} • ${getEmailValue(app)}`}>
+                                {getFounderName(app) !== "N/A" && getFounderName(app) !== getStartupOrIncubatorName(app) ? `${getFounderName(app)} • ` : ""}{getEmailValue(app)}
                               </span>
                             </div>
                           </td>
@@ -610,7 +766,7 @@ export default function CohortEvaluator() {
                       Rank #{selectedApp.rank}
                     </span>
                     <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--text-primary)", marginTop: "2px" }}>
-                      {selectedApp.startup_name}
+                      {getStartupOrIncubatorName(selectedApp)}
                     </h3>
                   </div>
 
@@ -672,21 +828,35 @@ export default function CohortEvaluator() {
                 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.78rem" }}>
                   <div>
-                    <span style={{ color: "var(--text-dim)" }}>Founder:</span>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{selectedApp.name || "N/A"}</div>
+                    <span style={{ color: "var(--text-dim)" }}>
+                      {entityMode === "incubator" ? "Incubator / Center Name:" : "Startup / Entity Name:"}
+                    </span>
+                    <div style={{ fontWeight: 700, color: "var(--primary)" }}>
+                      {getStartupOrIncubatorName(selectedApp)}
+                    </div>
                   </div>
                   <div>
-                    <span style={{ color: "var(--text-dim)" }}>Email:</span>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>{selectedApp.email || "N/A"}</div>
+                    <span style={{ color: "var(--text-dim)" }}>Founder / Applicant:</span>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                      {getFounderName(selectedApp)}
+                    </div>
                   </div>
                   <div>
-                    <span style={{ color: "var(--text-dim)" }}>Mobile:</span>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{selectedApp.mobile || "N/A"}</div>
+                    <span style={{ color: "var(--text-dim)" }}>Email Address:</span>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }} title={getEmailValue(selectedApp)}>
+                      {getEmailValue(selectedApp)}
+                    </div>
                   </div>
                   <div>
-                    <span style={{ color: "var(--text-dim)" }}>Address:</span>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={selectedApp.address}>
-                      {selectedApp.address || "N/A"}
+                    <span style={{ color: "var(--text-dim)" }}>Mobile / Phone:</span>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                      {getMobileValue(selectedApp)}
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <span style={{ color: "var(--text-dim)" }}>Address / Location:</span>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={getAddressValue(selectedApp)}>
+                      {getAddressValue(selectedApp)}
                     </div>
                   </div>
                 </div>
@@ -806,6 +976,53 @@ export default function CohortEvaluator() {
                   </ul>
                 </div>
               </div>
+
+              {/* Dynamic Uploaded Columns & Features */}
+              {selectedApp.raw_data && Object.keys(selectedApp.raw_data).length > 0 && (
+                <div style={{
+                  background: "var(--bg-dark)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", paddingBottom: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Database size={13} color="var(--primary)" />
+                      <span style={{ fontSize: "0.76rem", fontWeight: 800, textTransform: "uppercase", color: "var(--text-primary)" }}>
+                        Uploaded Excel Features ({Object.keys(selectedApp.raw_data).length} Columns)
+                      </span>
+                    </div>
+                    {selectedApp.dynamic_score !== undefined && (
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--primary)", background: "var(--primary-light)", padding: "2px 8px", borderRadius: "4px" }}>
+                        Feature Score: {selectedApp.dynamic_score}%
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", maxHeight: "250px", overflowY: "auto", paddingRight: "4px" }}>
+                    {Object.entries(selectedApp.raw_data).map(([key, val]) => {
+                      if (!key || val === undefined || val === null) return null;
+                      const score = selectedApp.feature_scores ? selectedApp.feature_scores[key] : null;
+                      return (
+                        <div key={key} style={{ background: "white", padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", fontSize: "0.74rem" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-dim)", fontWeight: 700, marginBottom: "2px" }}>
+                            <span style={{ textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={key}>{key}</span>
+                            {score !== null && score !== undefined && (
+                              <span style={{ color: score >= 70 ? "#10B981" : score >= 40 ? "#F59E0B" : "#6B7280", fontWeight: 800 }}>{score}</span>
+                            )}
+                          </div>
+                          <div style={{ color: "var(--text-primary)", fontWeight: 600, wordBreak: "break-word" }}>
+                            {val || <em style={{ color: "var(--text-dim)" }}>Empty</em>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Metadata */}
               <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "0.76rem", color: "var(--text-dim)" }}>

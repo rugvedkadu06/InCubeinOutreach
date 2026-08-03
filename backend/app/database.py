@@ -32,22 +32,38 @@ def get_mongo_db():
     return client.get_database("ecosystem")
 
 class MongoRow:
-    def __init__(self, data, keys):
-        self._data = {k: v for k, v in data.items() if k != "_id"}
-        self._keys = [k for k in keys if k != "_id"]
+    def __init__(self, data, keys=None):
+        if isinstance(data, MongoRow):
+            self._data = dict(data._data)
+            self._keys = list(data._keys)
+        elif isinstance(data, dict):
+            self._data = {k: v for k, v in data.items() if k != "_id"}
+            if keys:
+                self._keys = [k for k in keys if k != "_id"]
+            else:
+                self._keys = list(self._data.keys())
+        else:
+            self._data = {}
+            self._keys = []
         
     def __getitem__(self, key):
         if isinstance(key, int):
-            if key < len(self._keys):
+            if 0 <= key < len(self._keys):
                 return self._data.get(self._keys[key])
-            raise IndexError("row index out of range")
+            vals = list(self._data.values())
+            if 0 <= key < len(vals):
+                return vals[key]
+            return None
         return self._data.get(key)
+        
+    def get(self, key, default=None):
+        return self._data.get(key, default)
         
     def keys(self):
         return self._keys
         
     def __iter__(self):
-        return iter(self._data.values())
+        return iter(self._data.keys())
         
     def items(self):
         return self._data.items()
@@ -558,22 +574,21 @@ def init_db():
     client = get_mongo_client()
     db = client.get_database("ecosystem")
     
-    # Automatic Migration from SQLite
+    # Automatic Migration from SQLite per table
     sqlite_db_exists = os.path.exists(DB_PATH)
     if sqlite_db_exists:
-        if db["incubators"].count_documents({}) == 0:
-            print("MongoDB is empty. Migrating data from SQLite...")
-            sqlite_conn = sqlite3.connect(DB_PATH)
-            sqlite_conn.row_factory = sqlite3.Row
-            sqlite_cursor = sqlite_conn.cursor()
-            
-            tables = [
-                "incubators", "startups", "mentors", "investors", 
-                "relationships", "pipeline_logs", "outreach_leads", 
-                "scheduled_meetings"
-            ]
-            for table in tables:
-                try:
+        sqlite_conn = sqlite3.connect(DB_PATH)
+        sqlite_conn.row_factory = sqlite3.Row
+        sqlite_cursor = sqlite_conn.cursor()
+        
+        tables = [
+            "incubators", "startups", "mentors", "investors", 
+            "relationships", "pipeline_logs", "outreach_leads", 
+            "scheduled_meetings"
+        ]
+        for table in tables:
+            try:
+                if db[table].count_documents({}) == 0:
                     sqlite_cursor.execute(f"SELECT * FROM {table}")
                     rows = [dict(r) for r in sqlite_cursor.fetchall()]
                     if rows:
@@ -587,11 +602,12 @@ def init_db():
                                         pass
                         print(f"Migrating {len(rows)} records into MongoDB collection '{table}'...")
                         db[table].insert_many(rows)
-                except sqlite3.OperationalError as e:
-                    print(f"Table '{table}' does not exist in SQLite, skipping: {e}")
-            sqlite_conn.close()
-            print("Automatic migration to MongoDB complete!")
-            
+            except sqlite3.OperationalError as e:
+                pass
+            except Exception as e:
+                print(f"Error migrating '{table}': {e}")
+        sqlite_conn.close()
+        
     log_pipeline_step("SYSTEM", "SUCCESS", "Ecosystem MongoDB collections initialized successfully.")
 
 def log_pipeline_step(stage, status, message):

@@ -96,35 +96,35 @@ def clean_dpiit(dpiit_str: Any) -> Tuple[bool, str]:
 def map_excel_headers(headers: List[str]) -> Dict[str, int]:
     mapping = {}
     header_patterns = {
-        "email": [r"email"],
-        "name": [r"name\s*\(", r"^name$"],
-        "mobile": [r"mobile\s*number", r"^mobile$"],
-        "alternet_mobile": [r"alternet", r"alternative.*mobile"],
+        "email": [r"email", r"e-mail", r"mail"],
+        "name": [r"founder.*name", r"applicant.*name", r"name\s*\(", r"^name$", r"contact\s*person"],
+        "mobile": [r"mobile\s*number", r"^mobile$", r"phone", r"contact\s*no"],
+        "alternet_mobile": [r"alternet", r"alternative.*mobile", r"alt.*phone"],
         "dob": [r"date\s*of\s*birth", r"dob"],
         "gender": [r"gender"],
-        "address": [r"address"],
-        "city_state": [r"city\s*&\s*state", r"city", r"state"],
-        "highest_qualification": [r"highest\s*qualification"],
-        "school_university": [r"school", r"college", r"university"],
-        "how_found_out": [r"how\s*did\s*you\s*find\s*out"],
-        "startup_name": [r"name\s*of\s*startup", r"company/idea\s*name", r"startup.*name"],
-        "year_established": [r"year\s*of\s*establishment"],
-        "sector": [r"sector"],
-        "team_size": [r"team\s*members", r"team\s*size"],
-        "company_registered_name": [r"company\s*name\s*\("],
-        "comments": [r"comments\s*or\s*questions"],
-        "dpiit_registered": [r"dpiit\s*registered"],
-        "website": [r"website", r"share\s*the\s*url", r"website.*url"],
-        "applied_other": [r"applied\s*to\s*any\s*other\s*incubator"],
-        "litigation": [r"litigation"],
-        "business_summary": [r"summary\s*of\s*your\s*business\s*idea", r"business\s*summary"],
-        "competitors": [r"competitors"],
-        "revenue": [r"revenue"],
-        "pitch_deck_url": [r"presentation", r"pitch\s*deck"],
-        "stage": [r"stage\s*of\s*startup", r"^stage$"],
-        "legal_entity": [r"legal\s*entity\s*type"],
-        "logo_url": [r"company\s*logo"],
-        "applying_for": [r"what\s*are\s*you\s*applying\s*for"]
+        "address": [r"address", r"location"],
+        "city_state": [r"city\s*&\s*state", r"city", r"state", r"region"],
+        "highest_qualification": [r"highest\s*qualification", r"qualification", r"degree"],
+        "school_university": [r"school", r"college", r"university", r"institution"],
+        "how_found_out": [r"how\s*did\s*you\s*find\s*out", r"source"],
+        "startup_name": [r"name\s*of\s*startup", r"company/idea\s*name", r"startup.*name", r"incubator\s*name", r"hub\s*name", r"center\s*name", r"org.*name", r"tbi\s*name", r"entity\s*name", r"company\s*name", r"title"],
+        "year_established": [r"year\s*of\s*establishment", r"established", r"founding\s*year"],
+        "sector": [r"sector", r"domain", r"industry", r"focus\s*area", r"vertical"],
+        "team_size": [r"team\s*members", r"team\s*size", r"capacity", r"number\s*of\s*startups"],
+        "company_registered_name": [r"company\s*name\s*\(", r"registered\s*name"],
+        "comments": [r"comments\s*or\s*questions", r"remarks", r"notes"],
+        "dpiit_registered": [r"dpiit\s*registered", r"dpiit", r"recognized", r"registration\s*status"],
+        "website": [r"website", r"share\s*the\s*url", r"website.*url", r"portal\s*url", r"url"],
+        "applied_other": [r"applied\s*to\s*any\s*other\s*incubator", r"applied\s*elsewhere"],
+        "litigation": [r"litigation", r"legal\s*disputes"],
+        "business_summary": [r"summary\s*of\s*your\s*business\s*idea", r"business\s*summary", r"description", r"overview", r"about", r"details"],
+        "competitors": [r"competitors", r"competition"],
+        "revenue": [r"revenue", r"turnover", r"grants\s*received", r"funding\s*raised", r"budget"],
+        "pitch_deck_url": [r"presentation", r"pitch\s*deck", r"deck\s*url", r"attachment"],
+        "stage": [r"stage\s*of\s*startup", r"^stage$", r"maturity", r"level", r"type"],
+        "legal_entity": [r"legal\s*entity\s*type", r"entity\s*type", r"constitution"],
+        "logo_url": [r"company\s*logo", r"logo"],
+        "applying_for": [r"what\s*are\s*you\s*applying\s*for", r"program"]
     }
     
     for key, patterns in header_patterns.items():
@@ -140,6 +140,191 @@ def map_excel_headers(headers: List[str]) -> Dict[str, int]:
                 break
                 
     return mapping
+
+def extract_dynamic_rows_and_headers(sheet) -> Tuple[List[str], List[Dict[str, Any]], Dict[str, int]]:
+    headers = []
+    first_row = sheet[1]
+    for cell in first_row:
+        val = str(cell.value).strip() if cell.value is not None else ""
+        headers.append(val)
+
+    header_map = map_excel_headers(headers)
+    
+    # Inspect sample row values to auto-classify email and phone columns
+    sample_rows = []
+    for r_idx in range(2, min(sheet.max_row + 1, 6)):
+        r_vals = [sheet.cell(row=r_idx, column=c_idx).value for c_idx in range(1, len(headers) + 1)]
+        if any(r_vals):
+            sample_rows.append(r_vals)
+            
+    email_col_indices = set()
+    phone_col_indices = set()
+    
+    for c_idx in range(len(headers)):
+        for r_vals in sample_rows:
+            if c_idx < len(r_vals) and r_vals[c_idx] is not None:
+                val_str = str(r_vals[c_idx]).strip()
+                if "@" in val_str and "." in val_str and not val_str.startswith("http"):
+                    email_col_indices.add(c_idx)
+                elif re.search(r"^[+]?\d{10,12}$", val_str.replace(" ", "").replace("-", "")):
+                    phone_col_indices.add(c_idx)
+
+    # Automatically set email / mobile in header_map if detected
+    if "email" not in header_map and email_col_indices:
+        header_map["email"] = list(email_col_indices)[0]
+
+    if "mobile" not in header_map and phone_col_indices:
+        header_map["mobile"] = list(phone_col_indices)[0]
+
+    # Identify primary Name column: MUST NOT be an email or phone column
+    name_col_idx = None
+    for key in ["startup_name", "company_registered_name", "name"]:
+        if key in header_map and header_map[key] not in email_col_indices and header_map[key] not in phone_col_indices:
+            name_col_idx = header_map[key]
+            break
+            
+    if name_col_idx is None:
+        # Fallback 1: Header with name keywords excluding email/phone
+        for idx, h in enumerate(headers):
+            if idx in email_col_indices or idx in phone_col_indices:
+                continue
+            h_lower = h.lower()
+            if any(term in h_lower for term in ["name", "title", "startup", "company", "incubator", "entity", "hub", "center", "organization"]):
+                name_col_idx = idx
+                break
+                
+    if name_col_idx is None:
+        # Fallback 2: First non-email, non-phone column with non-empty header or data
+        for idx, h in enumerate(headers):
+            if idx not in email_col_indices and idx not in phone_col_indices:
+                name_col_idx = idx
+                break
+                
+    if name_col_idx is None and len(headers) > 0:
+        name_col_idx = 0
+
+    rows_data = []
+    for row_idx in range(2, sheet.max_row + 1):
+        row_values = [sheet.cell(row=row_idx, column=col_idx).value for col_idx in range(1, len(headers) + 1)]
+        if not any(row_values):
+            continue
+            
+        raw_dict = {}
+        for h_idx, h_name in enumerate(headers):
+            key_name = h_name if h_name else f"Column_{h_idx + 1}"
+            val = row_values[h_idx] if h_idx < len(row_values) else None
+            raw_dict[key_name] = "" if val is None else str(val).strip()
+
+        raw_entity_val = str(row_values[name_col_idx]).strip() if (name_col_idx is not None and name_col_idx < len(row_values) and row_values[name_col_idx] is not None) else f"Entry #{row_idx - 1}"
+        
+        # If entity name column happens to be an email address, parse out clean human name
+        if "@" in raw_entity_val and "." in raw_entity_val:
+            prefix = raw_entity_val.split("@")[0]
+            cleaned_name = re.sub(r"\d+", "", prefix).replace(".", " ").replace("_", " ").title().strip()
+            entity_name = cleaned_name if cleaned_name else prefix.title()
+        else:
+            entity_name = raw_entity_val
+
+        if not entity_name or entity_name.lower() in ["none", "null", "n/a"]:
+            entity_name = f"Entry #{row_idx - 1}"
+
+        rows_data.append({
+            "row_idx": row_idx,
+            "entity_name": entity_name,
+            "raw_data": raw_dict,
+            "row_values": row_values
+        })
+
+    return headers, rows_data, header_map
+
+def evaluate_dynamic_features(raw_data: Dict[str, str], headers: List[str]) -> Tuple[float, Dict[str, float], List[str], List[str]]:
+    """
+    Evaluates ANY random excel columns and returns dynamic score breakdown, strengths, and weaknesses.
+    """
+    feature_scores = {}
+    strengths = []
+    weaknesses = []
+    
+    total_dynamic_score = 0.0
+    evaluated_count = 0
+    
+    for h_name, val_str in raw_data.items():
+        if not h_name or not val_str:
+            continue
+            
+        h_lower = h_name.lower()
+        val_lower = val_str.lower()
+        col_score = 0.0
+        
+        # 1. Check if column value is numeric
+        num_match = re.search(r"[-+]?\d*\.\d+|\d+", val_str.replace(",", ""))
+        if num_match:
+            try:
+                num_val = float(num_match.group())
+                if any(kw in h_lower for kw in ["score", "rating", "rank", "marks", "points", "grade"]):
+                    if num_val <= 10:
+                        col_score = min(10.0, num_val)
+                    elif num_val <= 100:
+                        col_score = min(10.0, (num_val / 100.0) * 10.0)
+                    else:
+                        col_score = 8.0
+                elif any(kw in h_lower for kw in ["revenue", "funding", "grant", "budget", "capital", "turnover"]):
+                    cleaned_rev = clean_revenue(val_str)
+                    if cleaned_rev > 2000000:
+                        col_score = 10.0
+                    elif cleaned_rev > 500000:
+                        col_score = 7.5
+                    elif cleaned_rev > 0:
+                        col_score = 5.0
+                    else:
+                        col_score = 2.0
+                elif any(kw in h_lower for kw in ["team", "member", "staff", "employee", "startups", "capacity"]):
+                    team_n = clean_team_size(val_str)
+                    col_score = 10.0 if team_n >= 5 else (7.0 if team_n >= 2 else 4.0)
+                else:
+                    col_score = 6.0 if num_val > 0 else 3.0
+                    
+                feature_scores[h_name] = round(col_score * 10.0, 1)
+                total_dynamic_score += col_score
+                evaluated_count += 1
+                if col_score >= 7.5:
+                    strengths.append(f"Strong {h_name}: {val_str}")
+                continue
+            except Exception:
+                pass
+
+        # 2. Check affirmative / boolean signals
+        if val_lower in ["yes", "true", "dpiit", "active", "certified", "registered", "granted", "approved", "high", "top"]:
+            col_score = 9.0
+            feature_scores[h_name] = 90.0
+            total_dynamic_score += col_score
+            evaluated_count += 1
+            strengths.append(f"Verified {h_name} ({val_str})")
+        elif val_lower in ["no", "false", "pending", "none", "n/a", "nil"]:
+            col_score = 2.0
+            feature_scores[h_name] = 20.0
+            total_dynamic_score += col_score
+            evaluated_count += 1
+            weaknesses.append(f"Missing/Unconfirmed {h_name}")
+        elif len(val_str) > 10: # Text fields
+            word_count = len(val_str.split())
+            if word_count > 25:
+                col_score = 9.0
+                strengths.append(f"Detailed {h_name}")
+            elif word_count > 8:
+                col_score = 6.5
+            else:
+                col_score = 4.5
+            feature_scores[h_name] = round(col_score * 10.0, 1)
+            total_dynamic_score += col_score
+            evaluated_count += 1
+
+    if evaluated_count > 0:
+        avg_score = (total_dynamic_score / (evaluated_count * 10.0)) * 100.0
+    else:
+        avg_score = 50.0
+
+    return round(avg_score, 1), feature_scores, strengths[:3], weaknesses[:3]
 
 def evaluate_rules(startup: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
     scores = {}

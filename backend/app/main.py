@@ -179,13 +179,16 @@ def get_incubators(
     
     # Decode JSON fields and add region mapping
     for row in rows:
-        row["region"] = get_region(row["state"])
+        row["region"] = get_region(row.get("state"))
         for json_field in ["incubation_programs", "acceleration_programs", "lab_facilities", "focus_areas"]:
-            if row[json_field]:
+            val = row.get(json_field)
+            if val:
                 try:
-                    row[json_field] = json.loads(row[json_field]) if isinstance(row[json_field], str) else row[json_field]
+                    row[json_field] = json.loads(val) if isinstance(val, str) else val
                 except:
                     row[json_field] = []
+            else:
+                row[json_field] = []
                     
     if region:
         rows = [r for r in rows if r["region"].lower() == region.lower()]
@@ -406,6 +409,10 @@ def get_analytics():
     unique_focus_areas = sorted(list(all_areas))
 
     # Collaboration Lifecycle & Progress Pipeline
+    seed_outreach_leads()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
     cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'Sent' OR status = 'Follow-up Sent' OR contact_count > 0")
     total_outreach_sent = cursor.fetchone()[0]
 
@@ -416,7 +423,10 @@ def get_analytics():
     replied_count = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM scheduled_meetings WHERE status != 'Cancelled'")
-    meeting_scheduled_count = cursor.fetchone()[0]
+    sm_count = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'Meeting Scheduled'")
+    ol_count = cursor.fetchone()[0] or 0
+    meeting_scheduled_count = max(sm_count, ol_count)
 
     cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'MOUs'")
     mou_signed_count = cursor.fetchone()[0]
@@ -427,8 +437,10 @@ def get_analytics():
     cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE status = 'TBI Partnership'")
     tbi_partnerships_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT id, incubator_id, incubator_name, email, status, coalesce(contact_count, 0) as contact_count, sent_at, notes, next_action_date, meeting_scheduled_at FROM outreach_leads ORDER BY case when status='Incubated' then 1 when status='MOUs' then 2 when status='Meeting Scheduled' then 3 when status='Replied' then 4 when status='Sent' then 5 else 6 end LIMIT 50")
+    cursor.execute("SELECT * FROM outreach_leads")
     collaboration_leads_raw = [dict(row) for row in cursor.fetchall()]
+    status_order = {"Incubated": 1, "TBI Partnership": 2, "MOUs": 3, "Meeting Scheduled": 4, "Replied": 5, "Sent": 6, "Follow-up Sent": 7, "Draft": 8}
+    collaboration_leads_raw.sort(key=lambda x: status_order.get(x.get("status"), 99))
 
     conn.close()
 
@@ -630,7 +642,7 @@ def send_mou_email(req: MouSendRequest):
         if row:
             lead_id = row["id"]
             cursor.execute(
-                "UPDATE outreach_leads SET status = 'Sent', sent_at = ?, reply_text = NULL, reply_detected_at = NULL, intent_classification = NULL, lead_score = 0, meeting_link = NULL, meeting_scheduled_at = NULL WHERE id = ?",
+                "UPDATE outreach_leads SET status = 'MOUs', sent_at = ?, reply_text = NULL, reply_detected_at = NULL, intent_classification = NULL, lead_score = 0, meeting_link = NULL, meeting_scheduled_at = NULL WHERE id = ?",
                 (datetime.now().isoformat(), lead_id)
             )
         else:
@@ -640,7 +652,7 @@ def send_mou_email(req: MouSendRequest):
                 INSERT INTO outreach_leads (
                     id, incubator_id, incubator_name, email, status, sent_at, lead_score
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (lead_id, "inc_mou_" + uuid.uuid4().hex[:4], req.incubator_name, req.recipient_email, "Sent", datetime.now().isoformat(), 0))
+            ''', (lead_id, "inc_mou_" + uuid.uuid4().hex[:4], req.incubator_name, req.recipient_email, "MOUs", datetime.now().isoformat(), 0))
         conn.commit()
         conn.close()
     except Exception as db_err:
@@ -1378,6 +1390,7 @@ class OutreachEmailRequest(BaseModel):
     lead_id: str
     subject: Optional[str] = None
     body: Optional[str] = None
+    cc: Optional[str] = None
 
 
 class OutreachReplyRequest(BaseModel):
@@ -1445,51 +1458,32 @@ def seed_outreach_leads():
         ))
         conn.commit()
 
-    # Ensure trial lead exists in outreach_leads
-    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE email = 'kadurugved0@gmail.com'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute('''
-            INSERT INTO outreach_leads (
-                id, incubator_id, incubator_name, email, status, lead_score
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        ''', ("lead_trial_rugved", "inc_trial_rugved", "Trial Incubator (kadurugved0)", "kadurugved0@gmail.com", "Draft", 0))
-        conn.commit()
-
-    # Ensure trial2 lead exists in outreach_leads
-    cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE email = 'rugveddevmain@gmail.com'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute('''
-            INSERT INTO outreach_leads (
-                id, incubator_id, incubator_name, email, status, lead_score
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        ''', ("lead_trial_rugved2", "inc_trial_rugved2", "Trial Incubator (trial2)", "rugveddevmain@gmail.com", "Draft", 0))
-        conn.commit()
-
-    # Check if leads exist
-    cursor.execute("SELECT COUNT(*) FROM outreach_leads")
-    count = cursor.fetchone()[0]
-    if count > 1:
-        conn.close()
-        return
-        
-    # Fetch some incubators (prioritizing Nagpur University / IncubIMN)
-    cursor.execute("SELECT id, name, email FROM incubators WHERE id != 'inc_trial_rudveg' ORDER BY CASE WHEN name LIKE '%IncubIMN%' THEN 0 ELSE 1 END, name LIMIT 5")
-    incubators = cursor.fetchall()
-    
-    for inc in incubators:
-        inc_id = inc[0]
-        inc_name = inc[1]
-        inc_email = inc[2] or f"contact@{inc_name.lower().replace(' ', '').replace(',', '').replace('(', '').replace(')', '')}.org"
-        
-        cursor.execute("SELECT COUNT(*) FROM outreach_leads WHERE email = ?", (inc_email,))
-        if cursor.fetchone()[0] == 0:
-            lead_id = f"lead_{uuid.uuid4().hex[:8]}"
-            cursor.execute('''
-                INSERT INTO outreach_leads (
-                    id, incubator_id, incubator_name, email, status, lead_score, contact_count, last_contact_reason, next_action_date
-                ) VALUES (?, ?, ?, ?, ?, ?, 0, 'None', '')
-            ''', (lead_id, inc_id, inc_name, inc_email, "Draft", 0))
-        
+def seed_outreach_leads():
+    """Initializes outreach_leads DB table schema. Targeted outreach leads are added dynamically by the user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS outreach_leads (
+            id TEXT PRIMARY KEY,
+            incubator_id TEXT,
+            incubator_name TEXT,
+            email TEXT,
+            status TEXT DEFAULT 'Draft',
+            lead_score INTEGER DEFAULT 0,
+            contact_count INTEGER DEFAULT 0,
+            last_contact_reason TEXT,
+            next_action_date TEXT,
+            sent_at TEXT,
+            nurture_start_date TEXT,
+            nurture_cycle_days INTEGER DEFAULT 90,
+            reply_text TEXT,
+            reply_detected_at TEXT,
+            intent_classification TEXT,
+            meeting_link TEXT,
+            meeting_scheduled_at TEXT,
+            notes TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -1594,7 +1588,30 @@ def update_collaboration_stage(req: UpdateStageRequest):
         
     conn.commit()
     conn.close()
-    return {"status": "success", "message": f"Collaboration stage updated to '{req.stage}'."}
+def clean_email_reply(text: str) -> str:
+    if not text:
+        return ""
+    import re
+    cleaned = text
+    split_patterns = [
+        r"\r?\n\s*On\s+.*?\s+wrote:\s*",
+        r"\r?\n\s*From:\s+.*",
+        r"\r?\n\s*-----Original Message-----",
+        r"\r?\n\s*-----Forwarded Message-----"
+    ]
+    for p in split_patterns:
+        parts = re.split(p, cleaned, flags=re.IGNORECASE | re.DOTALL)
+        if parts and parts[0].strip():
+            cleaned = parts[0]
+            
+    result_lines = []
+    for line in cleaned.splitlines():
+        line_strip = line.strip()
+        if line_strip.startswith(">"):
+            continue
+        result_lines.append(line)
+        
+    return "\n".join(result_lines).strip()
 
 @app.get("/api/outreach/lead-timeline/{lead_id}")
 def get_lead_timeline(lead_id: str):
@@ -1617,7 +1634,7 @@ def get_lead_timeline(lead_id: str):
     
     timeline.append({
         "type": "ranked",
-        "title": "Ranked & Added to System",
+        "title": "📌 Indexed & Evaluated",
         "timestamp": lead.get("sent_at") or "Initial Setup",
         "details": f"Entity {lead['incubator_name']} indexed in ecosystem intelligence platform."
     })
@@ -1626,7 +1643,7 @@ def get_lead_timeline(lead_id: str):
         cnt = lead.get("contact_count", 1)
         timeline.append({
             "type": "outreach",
-            "title": f"Outreach Email Dispatched (Contact Count: {cnt})",
+            "title": f"📤 Outreach Email Dispatched (Contact Count: {cnt})",
             "timestamp": lead.get("sent_at") or "Recently",
             "details": f"Outreach email campaign sent to {lead['email']}."
         })
@@ -1634,33 +1651,78 @@ def get_lead_timeline(lead_id: str):
     if lead.get("followup_count", 0) > 0:
         timeline.append({
             "type": "followup",
-            "title": f"Follow-up Sent (#{lead['followup_count']})",
+            "title": f"🔄 Follow-up Dispatched (#{lead['followup_count']})",
             "timestamp": lead.get("last_followup_at") or "Recently",
-            "details": f"Follow-up email dispatched."
+            "details": f"Automated follow-up email sent to {lead['email']}."
         })
         
     if lead.get("reply_detected_at") or lead.get("reply_text"):
+        raw_reply = lead.get("reply_text") or ""
+        clean_text = clean_email_reply(raw_reply) if raw_reply else "Entity responded to outreach email."
+        if not clean_text:
+            clean_text = raw_reply
+            
+        quoted_history = ""
+        if raw_reply and clean_text and len(raw_reply) > len(clean_text):
+            quoted_history = raw_reply[len(clean_text):].strip()
+
+        intent = lead.get("intent_classification")
+        lead_score = lead.get("lead_score") or 50
+        
+        raw_lower = raw_reply.lower()
+        if not intent or intent == "Neutral":
+            if any(k in raw_lower for k in ["meet", "schedule", "call", "available", "zoom", "google meet", "calendar"]):
+                intent = "Meeting Requested"
+                lead_score = max(lead_score, 90)
+                sentiment = "Highly Interested"
+            elif any(k in raw_lower for k in ["interested", "collaborate", "partnership", "mou", "yes"]):
+                intent = "Positive Response"
+                lead_score = max(lead_score, 75)
+                sentiment = "Interested"
+            elif any(k in raw_lower for k in ["not interested", "no thanks", "unsubscribe"]):
+                intent = "Not Interested"
+                lead_score = 10
+                sentiment = "Uninterested"
+            else:
+                intent = "Information Received"
+                sentiment = "Neutral"
+        else:
+            sentiment = "Highly Interested" if lead_score >= 80 else "Interested" if lead_score >= 60 else "Neutral"
+            
         timeline.append({
             "type": "reply",
-            "title": "Reply & Information Received",
+            "title": "📩 Email Reply Received & Analyzed",
             "timestamp": lead.get("reply_detected_at") or "Recently",
-            "details": lead.get("reply_text") or "Entity responded to outreach email."
+            "details": clean_text,
+            "clean_text": clean_text,
+            "quoted_history": quoted_history,
+            "intent": intent,
+            "score": lead_score,
+            "sentiment": sentiment
         })
         
     for m in meetings:
         timeline.append({
             "type": "meeting",
-            "title": f"Meeting Booked ({m.get('status', 'Scheduled')})",
-            "timestamp": f"{m.get('meeting_date', '')} {m.get('meeting_time', '')}".strip(),
-            "details": f"Subject: {m.get('subject')} | Link: {m.get('meeting_link') or 'Google Meet'}"
+            "title": f"📅 Meeting Booked ({m.get('status', 'Scheduled')})",
+            "timestamp": f"{m.get('meeting_date', '')} {m.get('meeting_time', '')}".strip() or "Scheduled",
+            "details": f"Subject: {m.get('subject', 'Strategic Meeting')} | Meeting Link: {m.get('meeting_link') or 'Google Meet'}"
         })
         
+    if lead.get("notes"):
+        timeline.append({
+            "type": "notes",
+            "title": "📝 Progress Notes & Collected Info",
+            "timestamp": "Latest Notes",
+            "details": lead.get("notes")
+        })
+
     if lead.get("status") in ["MOUs", "Incubated", "TBI Partnership"]:
         timeline.append({
             "type": "collaboration",
-            "title": f"Collaboration Stage: {lead['status']}",
+            "title": f"🤝 Collaboration Stage: {lead['status']}",
             "timestamp": "Active",
-            "details": lead.get("notes") or f"Entity reached status {lead['status']}."
+            "details": f"Entity active in stage {lead['status']}."
         })
         
     return {
@@ -1701,6 +1763,8 @@ def trigger_outreach_email(req: OutreachEmailRequest):
             msg["Subject"] = req.subject or "Introduction to Incubein Foundation"
             msg["From"] = sender_email
             msg["To"] = lead["email"]
+            if req.cc:
+                msg["Cc"] = req.cc
             
             lead_name = lead["incubator_name"]
             is_startup = lead["incubator_id"] == "incubein_cohort"
@@ -1755,7 +1819,10 @@ Website: www.incubein.com"""
                 server = smtplib.SMTP(smtp_host, port, timeout=10)
                 server.starttls()
             server.login(smtp_user, smtp_pass)
-            server.sendmail(sender_email, [lead["email"]], msg.as_string())
+            recipients = [lead["email"]]
+            if req.cc:
+                recipients += [c.strip() for c in req.cc.split(",") if c.strip()]
+            server.sendmail(sender_email, recipients, msg.as_string())
             server.quit()
             email_sent_successfully = True
         except Exception as e:
@@ -3145,7 +3212,8 @@ def on_startup():
 
 
 # ─── INCUBEIN Cohort Evaluator Endpoints ──────────────────────
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, Form, Query
+from typing import Optional
 import io
 from .evaluator import (
     encrypt_val,
@@ -3154,6 +3222,8 @@ from .evaluator import (
     clean_team_size,
     clean_dpiit,
     map_excel_headers,
+    extract_dynamic_rows_and_headers,
+    evaluate_dynamic_features,
     evaluate_rules,
     evaluate_advanced_heuristics,
     compute_similarity_matrix
@@ -3161,38 +3231,34 @@ from .evaluator import (
 from .database import get_mongo_db
 
 @app.post("/api/incubein/upload")
-async def upload_cohort_excel(file: UploadFile = File(...)):
+async def upload_cohort_excel(
+    file: UploadFile = File(...),
+    entity_type: str = Form("startup")
+):
     try:
         contents = await file.read()
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
         sheet = wb.active
         
-        # Read header row
-        headers = [cell.value for cell in sheet[1]]
-        header_map = map_excel_headers(headers)
+        headers, rows_data, header_map = extract_dynamic_rows_and_headers(sheet)
         
-        if "startup_name" not in header_map and "company_registered_name" not in header_map:
-            raise HTTPException(status_code=400, detail="Could not identify Startup/Company Name column in the Excel file.")
-            
+        if not rows_data:
+            return {"status": "error", "message": "No valid data rows found in the uploaded Excel file."}
+
         startups = []
-        # Process rows
-        for row_idx in range(2, sheet.max_row + 1):
-            row_values = [sheet.cell(row=row_idx, column=col_idx).value for col_idx in range(1, len(headers) + 1)]
-            # Check if empty row
-            if not any(row_values):
-                continue
-                
+        for row_info in rows_data:
+            row_idx = row_info["row_idx"]
+            entity_name = row_info["entity_name"]
+            raw_data = row_info["raw_data"]
+            row_values = row_info["row_values"]
+
             def get_col_val(key):
                 idx = header_map.get(key)
                 if idx is not None and idx < len(row_values):
                     return row_values[idx]
                 return None
 
-            startup_name = get_col_val("startup_name") or get_col_val("company_registered_name")
-            if not startup_name:
-                continue # Skip unnamed rows
-                
             dpiit_registered_val = get_col_val("dpiit_registered")
             has_dpiit, dpiit_num = clean_dpiit(dpiit_registered_val)
             
@@ -3201,20 +3267,22 @@ async def upload_cohort_excel(file: UploadFile = File(...)):
             
             raw_team = get_col_val("team_size")
             team_size_val = clean_team_size(raw_team)
-            
-            # Non-PII Dict for processing
+
+            # Build record with both structured & dynamic raw data
             startup_data = {
                 "id_temp": f"temp_{row_idx}",
-                "startup_name": str(startup_name).strip(),
+                "entity_type": entity_type,
+                "startup_name": entity_name,
+                "name": str(get_col_val("name") or entity_name).strip(),
                 "sector": str(get_col_val("sector") or "General").strip(),
-                "stage": str(get_col_val("stage") or "Idea").strip(),
+                "stage": str(get_col_val("stage") or "Active").strip(),
                 "revenue": rev_val,
                 "team_size": team_size_val,
                 "dpiit": has_dpiit,
                 "dpiit_number": dpiit_num,
                 "website": str(get_col_val("website") or "").strip(),
                 "pitch_deck_url": str(get_col_val("pitch_deck_url") or "").strip(),
-                "business_summary": str(get_col_val("business_summary") or "").strip(),
+                "business_summary": str(get_col_val("business_summary") or raw_data.get(headers[0], "") if headers else "").strip(),
                 "competitors": str(get_col_val("competitors") or "").strip(),
                 "applied_other": str(get_col_val("applied_other") or "").strip(),
                 "litigation": str(get_col_val("litigation") or "").strip(),
@@ -3226,88 +3294,135 @@ async def upload_cohort_excel(file: UploadFile = File(...)):
                 "legal_entity": str(get_col_val("legal_entity") or "").strip(),
                 "applying_for": str(get_col_val("applying_for") or "").strip(),
                 "timestamp": str(get_col_val("timestamp") or "").strip(),
+                # Dynamic Excel column data
+                "all_columns": [h for h in headers if h],
+                "raw_data": raw_data
             }
             
-            # Rule Engine
+            # Rule Engine Evaluation
             rule_score, rule_breakdown = evaluate_rules(startup_data)
             startup_data["rule_score"] = rule_score
             startup_data["rule_breakdown"] = rule_breakdown
             
-            # Advanced Heuristic Evaluation (Replaces AI)
+            # Advanced Heuristics
             eval_result = evaluate_advanced_heuristics(startup_data)
+            
+            # Dynamic Features Evaluation for random columns
+            dynamic_score, feature_scores, dyn_strengths, dyn_weaknesses = evaluate_dynamic_features(raw_data, headers)
+            startup_data["feature_scores"] = feature_scores
+            startup_data["dynamic_score"] = dynamic_score
+            
+            # Blended final score: combines rule score & dynamic column evaluation
+            if len(headers) > 6:
+                final_score_val = round((rule_score * 0.4) + (dynamic_score * 0.6), 1)
+            else:
+                final_score_val = round(rule_score, 1)
+                
+            startup_data["final_score"] = final_score_val
             startup_data["llm_score"] = eval_result["llm_score"]
+            
+            # Merge strengths & weaknesses
+            all_strengths = list(dict.fromkeys(eval_result["strengths"] + dyn_strengths))
+            all_weaknesses = list(dict.fromkeys(eval_result["weaknesses"] + dyn_weaknesses))
+            
             startup_data["evaluation"] = {
                 "innovation": eval_result["innovation"],
                 "market": eval_result["market"],
                 "scalability": eval_result["scalability"],
                 "execution": eval_result["execution"],
                 "problem": eval_result["problem"],
-                "strengths": eval_result["strengths"],
-                "weaknesses": eval_result["weaknesses"],
+                "strengths": all_strengths[:4],
+                "weaknesses": all_weaknesses[:4],
                 "recommendation": eval_result["recommendation"]
             }
             
-            # Calculate final score (100% based on rule engine score)
-            startup_data["final_score"] = round(rule_score, 1)
-            
-            # Calculate default priority based on rule score
-            if rule_score >= 70:
+            if final_score_val >= 70:
                 priority_val = "High"
-            elif rule_score >= 40:
+            elif final_score_val >= 40:
                 priority_val = "Medium"
             else:
                 priority_val = "Low"
             startup_data["priority"] = priority_val
-
-
             
-            # Sensitive fields to encrypt
+            # Fallback PII resolution from raw_data if mapped header was missing
+            detected_email = get_col_val("email")
+            detected_name = get_col_val("name") or entity_name
+            detected_mobile = get_col_val("mobile")
+            detected_address = get_col_val("address") or get_col_val("city_state")
+
+            if not detected_email:
+                for k, v in raw_data.items():
+                    if v and "@" in v and "." in v and not str(v).startswith("http"):
+                        detected_email = v
+                        break
+
+            if not detected_mobile:
+                for k, v in raw_data.items():
+                    if v and re.search(r"^[+]?\d{10,12}$", str(v).replace(" ", "").replace("-", "")):
+                        detected_mobile = v
+                        break
+
+            if not detected_address:
+                for k, v in raw_data.items():
+                    if v and any(loc in k.lower() for loc in ["city", "state", "address", "location", "region"]):
+                        detected_address = v
+                        break
+
+            # PII fields encryption
             startup_data["encrypted_fields"] = {
-                "name": encrypt_val(get_col_val("name")),
-                "email": encrypt_val(get_col_val("email")),
-                "mobile": encrypt_val(get_col_val("mobile")),
+                "name": encrypt_val(detected_name),
+                "email": encrypt_val(detected_email),
+                "mobile": encrypt_val(detected_mobile),
                 "alternet_mobile": encrypt_val(get_col_val("alternet_mobile")),
                 "dob": encrypt_val(get_col_val("dob")),
-                "address": encrypt_val(get_col_val("address")),
+                "address": encrypt_val(detected_address),
             }
             
             startups.append(startup_data)
             
         if not startups:
-            return {"status": "error", "message": "No valid startup rows processed."}
+            return {"status": "error", "message": "No valid startup/incubator rows processed."}
             
-        # Compute similarity matrix
+        # Compute similarity matrix across summary / text fields
         startups = compute_similarity_matrix(startups)
         
-        # Sort and assign rank
+        # Sort by final score & rank
         startups.sort(key=lambda x: x["final_score"], reverse=True)
         for rank_idx, s in enumerate(startups):
             s["rank"] = rank_idx + 1
-            # Remove temp id
             if "id_temp" in s:
                 del s["id_temp"]
                 
         # Save to MongoDB
         db = get_mongo_db()
-        db["incubein_applications"].delete_many({})
+        # Delete existing entries of the same entity_type (or all if unspecified)
+        db["incubein_applications"].delete_many({"$or": [{"entity_type": entity_type}, {"entity_type": {"$exists": False}}]})
         db["incubein_applications"].insert_many(startups)
         
-        return {"status": "success", "message": f"Successfully processed and stored {len(startups)} startup applications."}
+        return {
+            "status": "success",
+            "message": f"Successfully processed and stored {len(startups)} {entity_type} entries with {len(headers)} columns.",
+            "columns_count": len(headers)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process cohort excel: {str(e)}")
 
 @app.get("/api/incubein/applications")
-def get_incubein_applications():
+def get_incubein_applications(entity_type: Optional[str] = Query(None)):
     try:
         db = get_mongo_db()
-        cursor = db["incubein_applications"].find({}).sort("rank", 1)
+        query = {}
+        if entity_type:
+            query = {"$or": [{"entity_type": entity_type}, {"entity_type": {"$exists": False}}]}
+            
+        cursor = db["incubein_applications"].find(query).sort("rank", 1)
         applications = []
         for doc in cursor:
             doc["_id"] = str(doc["_id"])
             
             # Decrypt sensitive fields on the fly
             enc = doc.get("encrypted_fields", {})
-            doc["name"] = decrypt_val(enc.get("name", ""))
+            doc["name"] = decrypt_val(enc.get("name", "")) or doc.get("name", "")
             doc["email"] = decrypt_val(enc.get("email", ""))
             doc["mobile"] = decrypt_val(enc.get("mobile", ""))
             doc["alternet_mobile"] = decrypt_val(enc.get("alternet_mobile", ""))
@@ -3516,6 +3631,196 @@ def clear_startups_directory():
         db = get_mongo_db()
         res = db["startups"].delete_many({})
         return {"status": "success", "message": f"Successfully cleared {res.deleted_count} startups from the directory."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Web Scraping & Data Enrichment Hub API ---
+class ScrapeEnrichRequest(BaseModel):
+    entity_name: str
+    entity_type: str = "incubator" # "incubator" | "startup"
+    city: str = ""
+    state: str = ""
+
+@app.post("/api/enrichment/scrape")
+def scrape_and_enrich_entity(req: ScrapeEnrichRequest):
+    try:
+        from .enricher import enrich_entity_data
+        enriched = enrich_entity_data(
+            entity_name=req.entity_name,
+            entity_type=req.entity_type,
+            user_city=req.city,
+            user_state=req.state
+        )
+        return {"status": "success", "data": enriched}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Data enrichment failed: {str(e)}")
+
+class BatchEnrichRequest(BaseModel):
+    entity_names: List[str]
+    entity_type: str = "incubator"
+
+@app.post("/api/enrichment/batch-scrape")
+def batch_enrich_entities(req: BatchEnrichRequest):
+    try:
+        from .enricher import enrich_entity_data
+        results = []
+        for name in req.entity_names[:15]: # Limit batch size to 15 for responsiveness
+            if name.strip():
+                res = enrich_entity_data(entity_name=name, entity_type=req.entity_type)
+                results.append(res)
+        return {"status": "success", "results": results, "count": len(results)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Incubator Cohort Evaluator Endpoints ---
+class AddIncubatorsToEcosystemRequest(BaseModel):
+    app_ids: List[str]
+    all: bool
+
+@app.post("/api/incubein/incubator/add-to-db")
+def add_incubator_cohort_to_db(req: AddIncubatorsToEcosystemRequest):
+    try:
+        db = get_mongo_db()
+        from bson import ObjectId
+        import uuid
+        
+        query = {"entity_type": "incubator"}
+        if not req.all:
+            parsed_ids = []
+            for aid in req.app_ids:
+                try: parsed_ids.append(ObjectId(aid))
+                except: pass
+            query["_id"] = {"$in": parsed_ids}
+            
+        cursor = db["incubein_applications"].find(query)
+        inserted_count = 0
+        
+        for doc in cursor:
+            inc_name = doc.get("startup_name") or doc.get("name") or "Incubator Hub"
+            existing = db["incubators"].find_one({"name": inc_name})
+            if not existing:
+                inc_id = f"inc_{uuid.uuid4().hex[:8]}"
+                enc = doc.get("encrypted_fields", {})
+                contact_email = decrypt_val(enc.get("email", "")) or doc.get("email") or f"contact@{inc_name.lower().replace(' ', '')[:15]}.org"
+                
+                inc_record = {
+                    "id": inc_id,
+                    "name": inc_name,
+                    "type": doc.get("stage") or "Academic TBI",
+                    "state": doc.get("city_state", "").split(",")[-1].strip() if "," in doc.get("city_state", "") else "Maharashtra",
+                    "city": doc.get("city_state", "").split(",")[0].strip() if doc.get("city_state") else "Nagpur",
+                    "email": contact_email,
+                    "website": doc.get("website") or f"https://www.{inc_name.lower().replace(' ', '')[:15]}.org.in",
+                    "focus_areas": doc.get("sector") or "DeepTech, AgriTech, CleanTech",
+                    "startup_count": 10,
+                    "active_startups": 8,
+                    "confidence_score": doc.get("final_score", 85),
+                    "status": "resolved"
+                }
+                db["incubators"].insert_one(inc_record)
+                inserted_count += 1
+                
+        return {"status": "success", "message": f"Successfully imported {inserted_count} incubators into Ecosystem Directory."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- 3-Month (90-Day) Incubation Nurture Loop API ---
+class MilestoneRequest(BaseModel):
+    lead_id: str
+    milestone_title: str
+    milestone_day: int # e.g. 7, 30, 60, 90
+    meeting_date: str
+    meeting_link: str = "Google Meet"
+    notes: str = ""
+
+@app.get("/api/lifecycle/nurture-loop/list")
+def get_nurture_loop_entities():
+    try:
+        db = get_mongo_db()
+        leads_cursor = db["outreach_leads"].find({}).sort("sent_at", -1)
+        active_loops = []
+        
+        from datetime import datetime
+        now = datetime.now()
+        
+        for doc in leads_cursor:
+            doc["_id"] = str(doc["_id"])
+            sent_str = doc.get("sent_at")
+            days_elapsed = 0
+            if sent_str:
+                try:
+                    sent_dt = datetime.fromisoformat(sent_str.replace("Z", "+00:00"))
+                    days_elapsed = (now - sent_dt).days
+                except:
+                    days_elapsed = 15
+            else:
+                days_elapsed = 5
+                
+            days_remaining = max(0, 90 - days_elapsed)
+            
+            # Retrieve milestones/meetings for this lead
+            meetings = list(db["scheduled_meetings"].find({"lead_id": doc["id"]}))
+            milestones = []
+            for m in meetings:
+                milestones.append({
+                    "id": str(m["_id"]),
+                    "title": m.get("subject", "Milestone Check-in"),
+                    "date": m.get("meeting_date", "Upcoming"),
+                    "status": m.get("status", "Scheduled"),
+                    "link": m.get("meeting_link", "Google Meet")
+                })
+                
+            active_loops.append({
+                "lead_id": doc["id"],
+                "name": doc.get("incubator_name", "Ecosystem Lead"),
+                "email": doc.get("email", ""),
+                "status": doc.get("status", "Draft"),
+                "days_elapsed": min(days_elapsed, 90),
+                "days_remaining": days_remaining,
+                "loop_progress_pct": min(100, int((days_elapsed / 90.0) * 100)),
+                "contact_count": doc.get("contact_count", 1),
+                "milestones": milestones,
+                "notes": doc.get("notes", "")
+            })
+            
+        return active_loops
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/lifecycle/nurture-loop/add-milestone")
+def add_nurture_milestone(req: MilestoneRequest):
+    try:
+        db = get_mongo_db()
+        from bson import ObjectId
+        
+        lead = db["outreach_leads"].find_one({"id": req.lead_id})
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found.")
+            
+        meeting_doc = {
+            "lead_id": req.lead_id,
+            "incubator_name": lead.get("incubator_name"),
+            "subject": f"Day {req.milestone_day} Incubation Milestone: {req.milestone_title}",
+            "meeting_date": req.meeting_date,
+            "meeting_time": "11:00 AM",
+            "meeting_link": req.meeting_link,
+            "status": "Scheduled",
+            "notes": req.notes,
+            "created_at": datetime.datetime.now().isoformat()
+        }
+        db["scheduled_meetings"].insert_one(meeting_doc)
+        
+        # Update lead notes
+        new_note = f"[Day {req.milestone_day} Milestone Scheduled] {req.milestone_title} on {req.meeting_date}"
+        existing_notes = lead.get("notes") or ""
+        updated_notes = f"{existing_notes}\n{new_note}".strip()
+        
+        db["outreach_leads"].update_one(
+            {"id": req.lead_id},
+            {"$set": {"notes": updated_notes, "next_action_date": req.meeting_date}}
+        )
+        
+        return {"status": "success", "message": f"Day {req.milestone_day} milestone scheduled successfully!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

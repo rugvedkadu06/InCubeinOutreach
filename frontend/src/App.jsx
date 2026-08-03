@@ -20,9 +20,10 @@ import AiAssistant from "./components/AiAssistant";
 import OutreachAutomation from "./components/OutreachAutomation";
 import CohortEvaluator from "./components/CohortEvaluator";
 import StartupsDirectory from "./components/StartupsDirectory";
+import EnrichmentHub from "./components/EnrichmentHub";
+import IncubationLoopTracker from "./components/IncubationLoopTracker";
 import { ToastContainer, toast } from "react-toastify";
-
-
+import { Globe, RefreshCcw as LoopIcon } from "lucide-react";
 
 import "react-toastify/dist/ReactToastify.css";
 
@@ -34,27 +35,31 @@ const NAV_ITEMS = [
     ],
   },
   {
-    section: "Outreach",
+    section: "Outreach & Nurturing",
     items: [
       { id: "directory",  label: "Incubators Directory", Icon: Building2,  subtitle: "Discover & search TBIs" },
       { id: "startups_directory", label: "Startups Directory", Icon: RocketIcon, subtitle: "Ecosystem startups list" },
       { id: "outreach", label: "Outreach Hub", Icon: Sparkles, subtitle: "Campaigns & Onboarding" },
+      { id: "nurture_loop", label: "90-Day Incubation Loop", Icon: LoopIcon, subtitle: "Active 3-month nurturing" },
     ],
   },
   {
-    section: "Evaluation",
+    section: "Intelligence & Evaluation",
     items: [
-      { id: "cohort_evaluator", label: "Cohort Evaluator", Icon: Sparkles, subtitle: "Secure ranking & analysis" },
+      { id: "cohort_evaluator", label: "Cohort Evaluator", Icon: Sparkles, subtitle: "Startup & Incubator ranking" },
+      { id: "enrichment_hub", label: "Scraper & Enrichment", Icon: Globe, subtitle: "Web lookup & data extraction" },
     ],
   },
 ];
 
 const PAGE_META = {
-  dashboard:        { title: "Ecosystem Insights & Analytics",        sub: "Aggregated metrics, state distributions, and technology verticals." },
-  directory:        { title: "Indian Incubators Directory",           sub: "Discover and search academic, government, and private TBIs." },
-  outreach:         { title: "Outreach & Onboarding Hub",             sub: "Draft MOUs, run targeted campaigns, and track startup pipeline." },
+  dashboard:          { title: "Ecosystem Insights & Analytics",        sub: "Aggregated metrics, state distributions, and technology verticals." },
+  directory:          { title: "Indian Incubators Directory",           sub: "Discover and search academic, government, and private TBIs." },
+  outreach:           { title: "Outreach & Onboarding Hub",             sub: "Draft MOUs, run targeted campaigns, and track startup pipeline." },
   startups_directory: { title: "Ecosystem Startups Directory",        sub: "Filter, search, and manage cohort and ecosystem startups." },
-  cohort_evaluator: { title: "INCUBEIN Cohort Evaluator",             sub: "Secure field-level encryption, multi-criteria scoring, AI reviews, and similarity matching." },
+  cohort_evaluator:   { title: "INCUBEIN Cohort Evaluator",             sub: "Secure evaluation, multi-criteria scoring, and incubator ranking." },
+  enrichment_hub:     { title: "Web Scraping & Data Enrichment Hub",    sub: "DuckDuckGo web search integration to auto-discover missing addresses, emails, & focus areas." },
+  nurture_loop:       { title: "90-Day Incubation & Partnership Loop",  sub: "Maintain active engagement across the 3-month incubation cycle with multi-meeting milestones." },
 };
 
 
@@ -185,6 +190,10 @@ export default function App() {
         return <StartupsDirectory />;
       case "cohort_evaluator":
         return <CohortEvaluator />;
+      case "enrichment_hub":
+        return <EnrichmentHub />;
+      case "nurture_loop":
+        return <IncubationLoopTracker />;
 
       default:
         return <AnalyticsDashboard analyticsData={analyticsData} loading={loading} />;

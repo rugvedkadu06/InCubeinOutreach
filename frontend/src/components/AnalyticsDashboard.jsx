@@ -595,14 +595,60 @@ function TimelineModal({ lead, onClose, onRefresh }) {
             ) : timelineData?.timeline?.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderLeft: "2px solid var(--border-color)", paddingLeft: "16px", marginLeft: "8px" }}>
                 {timelineData.timeline.map((item, idx) => (
-                  <div key={idx} style={{ position: "relative" }}>
+                  <div key={idx} style={{ position: "relative", marginBottom: "14px" }}>
                     <div style={{
-                      position: "absolute", left: "-23px", top: "2px", width: "12px", height: "12px",
-                      borderRadius: "50%", background: item.type === "collaboration" ? "#10B981" : item.type === "meeting" ? "#8B5CF6" : "var(--primary)"
+                      position: "absolute", left: "-23px", top: "2px", width: "14px", height: "14px",
+                      borderRadius: "50%",
+                      background: item.type === "collaboration" ? "#10B981" : item.type === "meeting" ? "#8B5CF6" : item.type === "reply" ? "#F59E0B" : "var(--primary)",
+                      border: "2px solid white", boxShadow: "0 0 0 2px rgba(0,0,0,0.05)"
                     }} />
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>{item.title}</div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginBottom: "2px" }}>{item.timestamp}</div>
-                    <div style={{ fontSize: "0.78rem", color: "var(--text-body)", background: "var(--bg-surface)", padding: "6px 10px", borderRadius: "6px" }}>{item.details}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-primary)" }}>{item.title}</div>
+                      <div style={{ fontSize: "0.7rem", color: "var(--text-dim)", fontWeight: 500 }}>{item.timestamp}</div>
+                    </div>
+
+                    {item.type === "reply" && (
+                      <div style={{ display: "flex", gap: "6px", margin: "6px 0", flexWrap: "wrap" }}>
+                        {item.intent && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", background: "#FEF3C7", color: "#92400E", border: "1px solid #FDE68A" }}>
+                            🎯 Intent: {item.intent}
+                          </span>
+                        )}
+                        {item.score !== undefined && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", background: "#E0E7FF", color: "#3730A3", border: "1px solid #C7D2FE" }}>
+                            ⭐ Interest Score: {item.score}/100
+                          </span>
+                        )}
+                        {item.sentiment && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px", borderRadius: "10px", background: "#D1FAE5", color: "#065F46", border: "1px solid #A7F3D0" }}>
+                            😊 Sentiment: {item.sentiment}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{
+                      fontSize: "0.8rem", color: "var(--text-body)", background: item.type === "reply" ? "#F8FAFC" : "var(--bg-surface)",
+                      padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--border-color)", marginTop: "4px",
+                      lineHeight: 1.5, whiteSpace: "pre-wrap"
+                    }}>
+                      {item.clean_text || item.details}
+                    </div>
+
+                    {item.quoted_history && (
+                      <details style={{ marginTop: "6px" }}>
+                        <summary style={{ fontSize: "0.72rem", color: "var(--text-dim)", fontWeight: 600, cursor: "pointer", userSelect: "none" }}>
+                          📄 Show original quoted thread
+                        </summary>
+                        <div style={{
+                          fontSize: "0.72rem", color: "var(--text-muted)", background: "#F1F5F9",
+                          padding: "8px 10px", borderRadius: "6px", marginTop: "4px", fontStyle: "italic",
+                          whiteSpace: "pre-wrap", borderLeft: "3px solid #CBD5E1", maxHeight: "150px", overflowY: "auto"
+                        }}>
+                          {item.quoted_history}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 ))}
               </div>
@@ -670,9 +716,15 @@ function TimelineModal({ lead, onClose, onRefresh }) {
 /* ── Collaboration Lifecycle & Progress Pipeline Widget ────── */
 function CollaborationLifecycleWidget({ collaborationData, onSelectLead }) {
   const [stageFilter, setStageFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   
   if (!collaborationData) return null;
   const { pipeline_stages = [], total_contacts_dispatched = 0, leads = [] } = collaborationData;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [stageFilter]);
 
   const stageColors = {
     "Ranked & Evaluated": "#64748B",
@@ -684,12 +736,48 @@ function CollaborationLifecycleWidget({ collaborationData, onSelectLead }) {
     "TBI Partnerships": "#0284C7"
   };
 
+  const isStageActive = (stgStage) => {
+    if (stageFilter === stgStage) return true;
+    if (stgStage === "Outreach Dispatched" && ["Outreach Dispatched", "Outreach Sent", "Sent"].includes(stageFilter)) return true;
+    if (stgStage === "Interactions & Replies" && ["Interactions & Replies", "Replied", "Interacted"].includes(stageFilter)) return true;
+    if (stgStage === "Meetings Booked" && ["Meetings Booked", "Meeting Scheduled", "Scheduled"].includes(stageFilter)) return true;
+    if (stgStage === "MOUs Signed" && ["MOUs Signed", "MOU Signed", "MOUs", "MOU"].includes(stageFilter)) return true;
+    if (stgStage === "Active Incubation" && ["Active Incubation", "Incubated", "Incubation"].includes(stageFilter)) return true;
+    if (stgStage === "TBI Partnerships" && ["TBI Partnerships", "TBI Partnership", "Partnership"].includes(stageFilter)) return true;
+    return false;
+  };
+
   const filteredLeads = leads.filter(l => {
     if (stageFilter === "All") return true;
-    if (stageFilter === "Outreach Sent") return l.status === "Sent" || l.status === "Follow-up Sent";
-    if (stageFilter === "Replied") return ["Replied", "In Loop", "Interviewed"].includes(l.status);
+    if (stageFilter === "Ranked & Evaluated") return true;
+    if (stageFilter === "Outreach Dispatched" || stageFilter === "Outreach Sent" || stageFilter === "Sent") {
+      return ["Sent", "Follow-up Sent"].includes(l.status);
+    }
+    if (stageFilter === "Interactions & Replies" || stageFilter === "Replied" || stageFilter === "Interacted") {
+      return ["Replied", "In Loop", "Interviewed"].includes(l.status);
+    }
+    if (stageFilter === "Meetings Booked" || stageFilter === "Meeting Scheduled" || stageFilter === "Scheduled") {
+      return ["Meeting Scheduled"].includes(l.status);
+    }
+    if (stageFilter === "MOUs Signed" || stageFilter === "MOU Signed" || stageFilter === "MOUs" || stageFilter === "MOU") {
+      return ["MOUs", "MOU Signed", "MOU"].includes(l.status);
+    }
+    if (stageFilter === "Active Incubation" || stageFilter === "Incubated" || stageFilter === "Incubation") {
+      return ["Incubated"].includes(l.status);
+    }
+    if (stageFilter === "TBI Partnerships" || stageFilter === "TBI Partnership" || stageFilter === "Partnership") {
+      return ["TBI Partnership"].includes(l.status);
+    }
     return l.status === stageFilter;
   });
+
+  const totalLeads = filteredLeads.length;
+  const isAllPage = pageSize === "All";
+  const effectivePageSize = isAllPage ? totalLeads : Number(pageSize);
+  const totalPages = isAllPage || totalLeads === 0 ? 1 : Math.ceil(totalLeads / effectivePageSize);
+  const startIndex = isAllPage ? 0 : (currentPage - 1) * effectivePageSize;
+  const endIndex = isAllPage ? totalLeads : Math.min(startIndex + effectivePageSize, totalLeads);
+  const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
 
   return (
     <div style={{ marginTop: "16px" }}>
@@ -704,33 +792,36 @@ function CollaborationLifecycleWidget({ collaborationData, onSelectLead }) {
 
       {/* Stage Funnel Visual Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px", marginBottom: "20px" }}>
-        {pipeline_stages.map((stg, i) => (
-          <div
-            key={i}
-            onClick={() => setStageFilter(stageFilter === stg.stage ? "All" : stg.stage)}
-            style={{
-              background: "white",
-              padding: "12px 14px",
-              borderRadius: "var(--radius-lg)",
-              border: `1px solid ${stageFilter === stg.stage ? stageColors[stg.stage] || "var(--primary)" : "var(--border-color)"}`,
-              boxShadow: stageFilter === stg.stage ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
-              cursor: "pointer",
-              transition: "all 0.2s ease"
-            }}
-          >
-            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>{stg.stage}</div>
-            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: stageColors[stg.stage] || "var(--primary)", marginTop: "4px" }}>
-              {stg.count}
+        {pipeline_stages.map((stg, i) => {
+          const active = isStageActive(stg.stage);
+          return (
+            <div
+              key={i}
+              onClick={() => setStageFilter(active ? "All" : stg.stage)}
+              style={{
+                background: "white",
+                padding: "12px 14px",
+                borderRadius: "var(--radius-lg)",
+                border: `1px solid ${active ? stageColors[stg.stage] || "var(--primary)" : "var(--border-color)"}`,
+                boxShadow: active ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>{stg.stage}</div>
+              <div style={{ fontSize: "1.4rem", fontWeight: 800, color: stageColors[stg.stage] || "var(--primary)", marginTop: "4px" }}>
+                {stg.count}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Leads Table */}
       <div className="glass-card" style={{ padding: "16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
           <h4 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: "var(--text-primary)" }}>
-            Entity Collaboration Progress ({filteredLeads.length})
+            Entity Collaboration Progress ({totalLeads})
           </h4>
           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
             <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", fontWeight: 600 }}>Filter:</span>
@@ -741,69 +832,122 @@ function CollaborationLifecycleWidget({ collaborationData, onSelectLead }) {
               style={{ fontSize: "0.78rem", padding: "4px 8px" }}
             >
               <option value="All">All Stages</option>
-              <option value="Outreach Sent">Outreach Sent</option>
-              <option value="Replied">Replied & Interacted</option>
-              <option value="Meeting Scheduled">Meeting Scheduled</option>
-              <option value="MOUs">MOU Signed</option>
-              <option value="Incubated">Active Incubation</option>
-              <option value="TBI Partnership">TBI Partnership</option>
+              <option value="Ranked & Evaluated">Ranked & Evaluated</option>
+              <option value="Outreach Dispatched">Outreach Dispatched</option>
+              <option value="Interactions & Replies">Interactions & Replies</option>
+              <option value="Meetings Booked">Meetings Booked</option>
+              <option value="MOUs Signed">MOUs Signed</option>
+              <option value="Active Incubation">Active Incubation</option>
+              <option value="TBI Partnerships">TBI Partnerships</option>
             </select>
           </div>
         </div>
 
-        {filteredLeads.length === 0 ? (
+        {totalLeads === 0 ? (
           <p style={{ fontSize: "0.85rem", color: "var(--text-dim)", textAlign: "center", padding: "20px 0" }}>
             No entity collaborations found in this stage.
           </p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left", color: "var(--text-muted)", fontWeight: 700 }}>
-                  <th style={{ padding: "8px 10px" }}>Entity Name</th>
-                  <th style={{ padding: "8px 10px" }}>Email / Contact</th>
-                  <th style={{ padding: "8px 10px", textAlign: "center" }}>Times Contacted</th>
-                  <th style={{ padding: "8px 10px" }}>Current Stage</th>
-                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLeads.map((lead) => (
-                  <tr key={lead.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
-                    <td style={{ padding: "10px", fontWeight: 700, color: "var(--text-primary)" }}>
-                      {lead.incubator_name}
-                      <span style={{ display: "block", fontSize: "0.7rem", color: "var(--text-dim)", fontWeight: 500 }}>
-                        {lead.incubator_id === "incubein_cohort" ? "Startup" : "Incubator Hub"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px", color: "var(--text-muted)" }}>{lead.email}</td>
-                    <td style={{ padding: "10px", textAlign: "center", fontWeight: 800, color: "var(--primary)" }}>
-                      {lead.contact_count || 0}
-                    </td>
-                    <td style={{ padding: "10px" }}>
-                      <span style={{
-                        padding: "3px 8px", borderRadius: "12px", fontSize: "0.72rem", fontWeight: 700,
-                        background: lead.status === "Incubated" ? "#D1FAE5" : lead.status === "MOUs" ? "#FEF3C7" : lead.status === "Meeting Scheduled" ? "#E0E7FF" : "var(--bg-surface)",
-                        color: lead.status === "Incubated" ? "#065F46" : lead.status === "MOUs" ? "#92400E" : lead.status === "Meeting Scheduled" ? "#3730A3" : "var(--text-body)",
-                        border: "1px solid var(--border-color)"
-                      }}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px", textAlign: "right" }}>
-                      <button
-                        onClick={() => onSelectLead(lead)}
-                        className="btn btn-secondary"
-                        style={{ fontSize: "0.75rem", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                      >
-                        <FileText size={12} /> Timeline Log
-                      </button>
-                    </td>
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left", color: "var(--text-muted)", fontWeight: 700 }}>
+                    <th style={{ padding: "8px 10px" }}>Entity Name</th>
+                    <th style={{ padding: "8px 10px" }}>Email / Contact</th>
+                    <th style={{ padding: "8px 10px", textAlign: "center" }}>Times Contacted</th>
+                    <th style={{ padding: "8px 10px" }}>Current Stage</th>
+                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paginatedLeads.map((lead) => (
+                    <tr key={lead.id} style={{ borderBottom: "1px solid var(--border-color)" }}>
+                      <td style={{ padding: "10px", fontWeight: 700, color: "var(--text-primary)" }}>
+                        {lead.incubator_name}
+                        <span style={{ display: "block", fontSize: "0.7rem", color: "var(--text-dim)", fontWeight: 500 }}>
+                          {lead.incubator_id === "incubein_cohort" ? "Startup" : "Incubator Hub"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px", color: "var(--text-muted)" }}>{lead.email}</td>
+                      <td style={{ padding: "10px", textAlign: "center", fontWeight: 800, color: "var(--primary)" }}>
+                        {lead.contact_count || 0}
+                      </td>
+                      <td style={{ padding: "10px" }}>
+                        <span style={{
+                          padding: "3px 8px", borderRadius: "12px", fontSize: "0.72rem", fontWeight: 700,
+                          background: lead.status === "Incubated" ? "#D1FAE5" : lead.status === "MOUs" ? "#FEF3C7" : lead.status === "Meeting Scheduled" ? "#E0E7FF" : "var(--bg-surface)",
+                          color: lead.status === "Incubated" ? "#065F46" : lead.status === "MOUs" ? "#92400E" : lead.status === "Meeting Scheduled" ? "#3730A3" : "var(--text-body)",
+                          border: "1px solid var(--border-color)"
+                        }}>
+                          {lead.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "right" }}>
+                        <button
+                          onClick={() => onSelectLead(lead)}
+                          className="btn btn-secondary"
+                          style={{ fontSize: "0.75rem", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <FileText size={12} /> Timeline Log
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {totalLeads > (isAllPage ? 999999 : pageSize) && (
+              <div className="pagination-container" style={{ marginTop: "14px" }}>
+                <div className="pagination-info">
+                  Showing <strong>{startIndex + 1} – {endIndex}</strong> of <strong>{totalLeads}</strong> entities
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    className="pagination-btn"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  >
+                    « Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1)
+                    .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                    .map((page, idx, arr) => {
+                      const prevPage = arr[idx - 1];
+                      const hasGap = prevPage && page - prevPage > 1;
+                      return (
+                        <React.Fragment key={page}>
+                          {hasGap && <span style={{ color: "var(--text-dim)", padding: "0 4px" }}>...</span>}
+                          <button
+                            className={`pagination-btn ${currentPage === page ? "active" : ""}`}
+                            onClick={() => setCurrentPage(page)}
+                          >
+                            {page}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                  <button
+                    className="pagination-btn"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  >
+                    Next »
+                  </button>
+                </div>
+                <div className="pagination-size-select">
+                  <span>Per page:</span>
+                  <select value={pageSize} onChange={(e) => { setPageSize(e.target.value === "All" ? "All" : Number(e.target.value)); setCurrentPage(1); }}>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value="All">All</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
