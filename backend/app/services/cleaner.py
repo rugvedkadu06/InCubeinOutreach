@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from .database import get_db_connection, log_pipeline_step
+from ..core.database import get_db_connection, log_pipeline_step
 
 # State normalization mapping
 STATE_MAPPING = {

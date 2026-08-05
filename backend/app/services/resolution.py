@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from .database import get_db_connection, log_pipeline_step
+from ..core.database import get_db_connection, log_pipeline_step
 
 def get_tokens(text):
     if not text:

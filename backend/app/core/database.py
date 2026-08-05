@@ -7,6 +7,8 @@ import pymongo
 from datetime import datetime
 from dotenv import load_dotenv
 
+from .config import APP_DATA_DIR
+
 load_dotenv()
 
 # When running as a PyInstaller exe, store DB next to the .exe so data persists.
@@ -14,7 +16,7 @@ load_dotenv()
 if getattr(sys, 'frozen', False):
     _data_dir = os.path.dirname(sys.executable)
 else:
-    _data_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _data_dir = str(APP_DATA_DIR)
 
 DB_PATH = os.path.join(_data_dir, "ecosystem.db")
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")

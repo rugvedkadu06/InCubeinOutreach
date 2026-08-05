@@ -5,7 +5,7 @@ import ast
 import re
 import openpyxl
 from datetime import datetime
-from .database import get_db_connection, log_pipeline_step
+from ..core.database import get_db_connection, log_pipeline_step
 
 def clean_sectors(sector_str):
     if not sector_str:

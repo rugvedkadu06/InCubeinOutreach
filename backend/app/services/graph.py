@@ -1,7 +1,7 @@
 import json
 import csv
 import io
-from .database import get_db_connection
+from ..core.database import get_db_connection
 
 def generate_web_graph():
     """Generates a node-link structure suitable for D3/Cytoscape visualizations."""

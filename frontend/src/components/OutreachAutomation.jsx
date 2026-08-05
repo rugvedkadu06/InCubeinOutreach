@@ -21,7 +21,9 @@ import {
   Upload,
   Download,
   Building2,
-  Rocket
+  Rocket,
+  PauseCircle,
+  PlayCircle
 } from "lucide-react";
 
 // Academic Collaboration Template
@@ -315,6 +317,8 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
   const [checkingReplies, setCheckingReplies] = useState(false);
   const [checkingFollowups, setCheckingFollowups] = useState(false);
   const [followupDelay, setFollowupDelay] = useState(120);
+  const [scanningPaused, setScanningPaused] = useState(true);
+  const [followupsPaused, setFollowupsPaused] = useState(true);
   
   // Active workflow node (for flowchart animation highlight)
   // 1: Send, 2: Reply, 3: AI intent, 4: Score, 5: Calendar
@@ -581,6 +585,12 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
           if (typeof configData.followup_delay === "number") {
             setFollowupDelay(configData.followup_delay);
           }
+          if (typeof configData.scanning_paused === "boolean") {
+            setScanningPaused(configData.scanning_paused);
+          }
+          if (typeof configData.followups_paused === "boolean") {
+            setFollowupsPaused(configData.followups_paused);
+          }
         }
       } catch (configErr) {
         console.error("Error fetching sync config:", configErr);
@@ -637,6 +647,46 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
         addLog("SYSTEM", `Follow-up delay successfully updated to ${newVal} seconds.`);
       } else {
         addLog("ERROR", "Failed to persist follow-up delay setting on backend.");
+      }
+    } catch (err) {
+      addLog("ERROR", "Failed to connect to backend configuration API.");
+    }
+  };
+
+  const handleToggleScanning = async () => {
+    const newVal = !scanningPaused;
+    setScanningPaused(newVal);
+    addLog("SYSTEM", newVal ? "Pausing background inbox scanning..." : "Resuming background inbox scanning...");
+    try {
+      const res = await fetch("/api/outreach/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sync_interval: syncInterval, followup_delay: followupDelay, scanning_paused: newVal, followups_paused: followupsPaused })
+      });
+      if (res.ok) {
+        addLog("SYSTEM", newVal ? "Background scanning paused." : "Background scanning resumed.");
+      } else {
+        addLog("ERROR", "Failed to persist scanning pause setting on backend.");
+      }
+    } catch (err) {
+      addLog("ERROR", "Failed to connect to backend configuration API.");
+    }
+  };
+
+  const handleToggleFollowups = async () => {
+    const newVal = !followupsPaused;
+    setFollowupsPaused(newVal);
+    addLog("SYSTEM", newVal ? "Pausing automatic follow-up dispatch..." : "Resuming automatic follow-up dispatch...");
+    try {
+      const res = await fetch("/api/outreach/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sync_interval: syncInterval, followup_delay: followupDelay, scanning_paused: scanningPaused, followups_paused: newVal })
+      });
+      if (res.ok) {
+        addLog("SYSTEM", newVal ? "Automatic follow-ups paused." : "Automatic follow-ups resumed.");
+      } else {
+        addLog("ERROR", "Failed to persist follow-up pause setting on backend.");
       }
     } catch (err) {
       addLog("ERROR", "Failed to connect to backend configuration API.");
@@ -1478,6 +1528,24 @@ export default function OutreachAutomation({ preselectedIncubatorName, refreshTr
                     <option value={0}>Disabled (Manual)</option>
                   </select>
                 </div>
+
+                <button
+                  className="btn btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.75rem", fontSize: "0.8rem", height: "32px", background: scanningPaused ? "rgba(239, 68, 68, 0.9)" : "rgba(16, 185, 129, 0.9)", border: scanningPaused ? "1px solid rgb(239, 68, 68)" : "1px solid rgb(16, 185, 129)" }}
+                  onClick={handleToggleScanning}
+                >
+                  {scanningPaused ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
+                  <span>{scanningPaused ? "Resume Scan" : "Pause Scan"}</span>
+                </button>
+
+                <button
+                  className="btn btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.4rem 0.75rem", fontSize: "0.8rem", height: "32px", background: followupsPaused ? "rgba(239, 68, 68, 0.9)" : "rgba(16, 185, 129, 0.9)", border: followupsPaused ? "1px solid rgb(239, 68, 68)" : "1px solid rgb(16, 185, 129)" }}
+                  onClick={handleToggleFollowups}
+                >
+                  {followupsPaused ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
+                  <span>{followupsPaused ? "Resume Follow-ups" : "Pause Follow-ups"}</span>
+                </button>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginRight: "0.5rem" }}>
                   <span style={{ fontSize: "0.8rem", color: "#000000", whiteSpace: "nowrap", fontWeight: "600" }}>Follow-up Delay:</span>
